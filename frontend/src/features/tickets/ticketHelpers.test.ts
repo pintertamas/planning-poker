@@ -51,9 +51,9 @@ describe("pointsLabel", () => {
 });
 
 describe("errorMessage", () => {
-  it("tells the host to reconnect when Linear rejects the key", () => {
-    expect(errorMessage(new LinearAuthError("raw"))).toContain("Linear rejected the API key");
-    expect(errorMessage(new LinearAuthError("raw"))).toContain("Reconnect Linear");
+  it("tells the host to sign in again when the Linear session is rejected", () => {
+    expect(errorMessage(new LinearAuthError("raw"))).toContain("Your Linear sign-in expired");
+    expect(errorMessage(new LinearAuthError("raw"))).toContain("Create a new room to sign in again");
   });
 
   it("passes through Linear and plain errors and falls back for unknown values", () => {

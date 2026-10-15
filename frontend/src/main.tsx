@@ -15,7 +15,18 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   return Promise.race([work, timeout]).finally(() => window.clearTimeout(timer));
 }
 
+const LEGACY_LINEAR_KEY_STORAGE = "pp.linearKey";
+
+function removeLegacyLinearKey() {
+  try {
+    localStorage.removeItem(LEGACY_LINEAR_KEY_STORAGE);
+  } catch {
+    void 0;
+  }
+}
+
 async function bootstrap() {
+  removeLegacyLinearKey();
   try {
     await withTimeout(completeOAuthIfPresent(), OAUTH_TIMEOUT_MS).catch(() => null);
   } catch {

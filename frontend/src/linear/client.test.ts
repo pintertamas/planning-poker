@@ -12,10 +12,14 @@ function fetchReturning(response: Response) {
   return vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => response.clone());
 }
 
+function staticAuth(header: string | null = "Bearer at-test") {
+  return { getHeader: vi.fn(async () => header) };
+}
+
 describe("createGraphqlClient", () => {
-  it("sends the raw API key without a Bearer prefix", async () => {
+  it("sends the Bearer header from the provider to the GraphQL endpoint", async () => {
     const fetchMock = fetchReturning(jsonResponse({ data: { ok: true } }));
-    const client = createGraphqlClient("lin_api_test_key", fetchMock as unknown as typeof fetch);
+    const client = createGraphqlClient(staticAuth("Bearer at-1"), fetchMock as unknown as typeof fetch);
 
     await client.query("query { ok }");
 
@@ -23,14 +27,14 @@ describe("createGraphqlClient", () => {
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe("https://api.linear.app/graphql");
     const headers = init?.headers as Record<string, string>;
-    expect(headers.Authorization).toBe("lin_api_test_key");
+    expect(headers.Authorization).toBe("Bearer at-1");
     expect(headers["Content-Type"]).toBe("application/json");
     expect(init?.method).toBe("POST");
   });
 
   it("returns data on success", async () => {
     const client = createGraphqlClient(
-      "k",
+      staticAuth(),
       fetchReturning(jsonResponse({ data: { viewer: { id: "u1" } } })) as unknown as typeof fetch,
     );
     await expect(client.query<{ viewer: { id: string } }>("query { viewer { id } }")).resolves.toEqual({
@@ -40,7 +44,7 @@ describe("createGraphqlClient", () => {
 
   it("throws LinearError with the first message when an HTTP 200 body has errors", async () => {
     const client = createGraphqlClient(
-      "k",
+      staticAuth(),
       fetchReturning(
         jsonResponse({
           data: null,
@@ -56,7 +60,7 @@ describe("createGraphqlClient", () => {
   });
 
   it("throws LinearAuthError on HTTP 401", async () => {
-    const client = createGraphqlClient("bad", fetchReturning(jsonResponse({}, 401)) as unknown as typeof fetch);
+    const client = createGraphqlClient(staticAuth(), fetchReturning(jsonResponse({}, 401)) as unknown as typeof fetch);
 
     const error = await client.query("query { viewer { id } }").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(LinearAuthError);
@@ -64,13 +68,13 @@ describe("createGraphqlClient", () => {
   });
 
   it("throws LinearAuthError on HTTP 403", async () => {
-    const client = createGraphqlClient("bad", fetchReturning(jsonResponse({}, 403)) as unknown as typeof fetch);
+    const client = createGraphqlClient(staticAuth(), fetchReturning(jsonResponse({}, 403)) as unknown as typeof fetch);
     await expect(client.query("query { viewer { id } }")).rejects.toBeInstanceOf(LinearAuthError);
   });
 
   it("treats an authentication error extension in a 200 body as LinearAuthError", async () => {
     const client = createGraphqlClient(
-      "bad",
+      staticAuth(),
       fetchReturning(
         jsonResponse({
           data: null,
@@ -85,7 +89,7 @@ describe("createGraphqlClient", () => {
     const fetchMock = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     });
-    const client = createGraphqlClient("k", fetchMock as unknown as typeof fetch);
+    const client = createGraphqlClient(staticAuth(), fetchMock as unknown as typeof fetch);
 
     const error = await client.query("query { ok }").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(LinearError);
@@ -94,7 +98,7 @@ describe("createGraphqlClient", () => {
 
   it("queryPartial returns data alongside errors instead of throwing", async () => {
     const client = createGraphqlClient(
-      "k",
+      staticAuth(),
       fetchReturning(
         jsonResponse({
           data: { r0: { id: "a" }, r1: null },
@@ -109,25 +113,13 @@ describe("createGraphqlClient", () => {
   });
 });
 
-describe("createGraphqlClient with an AuthProvider", () => {
+describe("createGraphqlClient refresh and sign-in handling", () => {
   function bearerAwareFetch(accepted: string) {
     return vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const header = (init?.headers as Record<string, string>).Authorization;
       return header === accepted ? jsonResponse({ data: { ok: true } }) : jsonResponse({}, 401);
     });
   }
-
-  it("sends the header returned by getHeader", async () => {
-    const fetchMock = fetchReturning(jsonResponse({ data: { ok: true } }));
-    const provider = { getHeader: vi.fn(async () => "Bearer at-1") };
-    const client = createGraphqlClient(provider, fetchMock as unknown as typeof fetch);
-
-    await client.query("query { ok }");
-
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer at-1");
-    expect(provider.getHeader).toHaveBeenCalledTimes(1);
-  });
 
   it("refreshes once and retries the request when Linear returns 401", async () => {
     let header = "Bearer old";
@@ -218,11 +210,5 @@ describe("createGraphqlClient with an AuthProvider", () => {
     expect(error).toBeInstanceOf(LinearAuthError);
     expect((error as LinearAuthError).message).toBe("Your Linear sign-in expired. Sign in again.");
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("keeps the API key message for raw key authentication", async () => {
-    const client = createGraphqlClient("bad", fetchReturning(jsonResponse({}, 401)) as unknown as typeof fetch);
-    const error = await client.query("query { ok }").catch((e: unknown) => e);
-    expect((error as LinearAuthError).message).toMatch(/rejected the API key/);
   });
 });

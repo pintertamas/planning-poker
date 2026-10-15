@@ -13,7 +13,6 @@ export class LinearAuthError extends LinearError {
 }
 
 const ENDPOINT = "https://api.linear.app/graphql";
-const AUTH_MESSAGE = "Linear rejected the API key. Check that it is correct and still active.";
 const SIGN_IN_EXPIRED_MESSAGE = "Your Linear sign-in expired. Sign in again.";
 const NETWORK_MESSAGE = "Could not reach Linear. Check your connection and try again.";
 
@@ -55,9 +54,8 @@ async function readBody<T>(response: Response): Promise<GraphqlBody<T> | null> {
   }
 }
 
-export function createGraphqlClient(auth: string | AuthProvider, fetchImpl: typeof fetch = fetch): GraphqlClient {
+export function createGraphqlClient(auth: AuthProvider, fetchImpl: typeof fetch = fetch): GraphqlClient {
   async function authorization(): Promise<string> {
-    if (typeof auth === "string") return auth;
     const header = await auth.getHeader();
     if (header === null) throw new LinearAuthError(SIGN_IN_EXPIRED_MESSAGE);
     return header;
@@ -83,13 +81,13 @@ export function createGraphqlClient(auth: string | AuthProvider, fetchImpl: type
   async function send<T>(query: string, variables: Record<string, unknown>): Promise<GraphqlResult<T>> {
     const payload = JSON.stringify({ query, variables });
     let attempt = await dispatch<T>(payload);
-    if (typeof auth !== "string" && auth.refresh && isAuthFailure(attempt)) {
+    if (auth.refresh && isAuthFailure(attempt)) {
       if (await auth.refresh()) {
         attempt = await dispatch<T>(payload);
       }
     }
     if (isAuthFailure(attempt)) {
-      throw new LinearAuthError(typeof auth === "string" ? AUTH_MESSAGE : SIGN_IN_EXPIRED_MESSAGE);
+      throw new LinearAuthError(SIGN_IN_EXPIRED_MESSAGE);
     }
 
     const { response, body, errors } = attempt;

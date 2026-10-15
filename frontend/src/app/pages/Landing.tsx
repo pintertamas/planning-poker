@@ -5,11 +5,9 @@ import {
   Chip,
   HeroCard,
   Icon,
-  LabelValue,
   LogoMark,
   PillButton,
   RailNav,
-  SectionCard,
   SidePanel,
   SideRow,
   TopBar,
@@ -48,7 +46,7 @@ export function Landing() {
 }
 
 function LandingContent() {
-  const { mode, authMethod, oauthAvailable, setKey, signOut } = useLinear();
+  const { mode, oauthAvailable, signOut } = useLinear();
   const toast = useToast();
   const [name, setNameState] = useState(() => getName());
   const [connectOpen, setConnectOpen] = useState(false);
@@ -56,7 +54,6 @@ function LandingContent() {
   const resumed = useRef(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
-  const joinRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     writePendingCreate(false);
@@ -82,18 +79,14 @@ function LandingContent() {
   }
 
   function handleCreate() {
-    if (mode === "none") {
-      setPendingCreate(true);
-      if (oauthAvailable) writePendingCreate(true);
-      setConnectOpen(true);
+    if (mode !== "none") {
+      openRoom(false);
       return;
     }
-    openRoom(false);
-  }
-
-  function openConnect() {
-    setPendingCreate(false);
-    writePendingCreate(false);
+    if (oauthAvailable) {
+      setPendingCreate(true);
+      writePendingCreate(true);
+    }
     setConnectOpen(true);
   }
 
@@ -101,10 +94,6 @@ function LandingContent() {
     setConnectOpen(false);
     setPendingCreate(false);
     writePendingCreate(false);
-  }
-
-  function handleConnected() {
-    setConnectOpen(false);
   }
 
   function handleName(value: string) {
@@ -124,35 +113,24 @@ function LandingContent() {
   }
 
   const connected = mode !== "none";
-  const statusLabel =
-    authMethod === "oauth" ? "Signed in with Linear" : authMethod === "key" ? "Personal API key" : "Not connected";
 
   return (
     <div className="pp-app">
       <RailNav
-        items={[
-          { id: "start", label: "Start", icon: "room", active: true, onClick: () => navigate("/") },
-          { id: "linear", label: "Linear", icon: "link", onClick: openConnect },
-        ]}
+        items={[{ id: "start", label: "Start", icon: "room", active: true, onClick: () => navigate("/") }]}
       />
-      <SidePanel title="Start" footer="Your Linear connection stays in this browser.">
-        <SideRow active onClick={handleCreate}>
-          <span className="pp-side-icon">
-            <Icon name="plus" size={18} />
-          </span>
-          <span className="pp-side-label">Create room</span>
+      <SidePanel title="How it works">
+        <SideRow>
+          <span className="pp-side-icon">1</span>
+          <span className="pp-side-label">Create a room, sign in with Linear, import tickets</span>
         </SideRow>
-        <SideRow onClick={() => openRoom(true)}>
-          <span className="pp-side-icon">
-            <Icon name="play" size={16} />
-          </span>
-          <span className="pp-side-label">Try the demo</span>
+        <SideRow>
+          <span className="pp-side-icon">2</span>
+          <span className="pp-side-label">Share the link with your team</span>
         </SideRow>
-        <SideRow onClick={() => joinRef.current?.focus()}>
-          <span className="pp-side-icon">
-            <Icon name="arrow-right" size={18} />
-          </span>
-          <span className="pp-side-label">Join with a code</span>
+        <SideRow>
+          <span className="pp-side-icon">3</span>
+          <span className="pp-side-label">Vote, reveal, accept the estimate</span>
         </SideRow>
       </SidePanel>
       <main className="pp-main">
@@ -164,9 +142,7 @@ function LandingContent() {
             </span>
           }
           center={<span className="pp-muted">Planning poker for Linear tickets</span>}
-          right={
-            connected ? <Chip tone="green">Linear connected</Chip> : <Chip tone="outline">No Linear key</Chip>
-          }
+          right={connected ? <Chip tone="outline">Signed in with Linear</Chip> : undefined}
         />
         <HeroCard
           chips={
@@ -177,7 +153,7 @@ function LandingContent() {
               <Chip tone="teal">Demo ready</Chip>
             </>
           }
-          title="Estimate together, in your tickets."
+          title="Groom the backlog."
           actions={
             <PillButton variant="secondary" onClick={() => openRoom(true)}>
               Try the demo
@@ -187,6 +163,9 @@ function LandingContent() {
             </PillButton>
           }
         >
+          <p className="pp-hero-lede">
+            Pick tickets from Linear, vote 1, 2, 3, 5 or 8, and the estimate goes back to the ticket.
+          </p>
           <div className="pp-hero-form">
             <label className="pp-field">
               <span className="pp-field-label">Your name</span>
@@ -199,16 +178,28 @@ function LandingContent() {
               />
             </label>
             <div className="pp-hero-create">
-              <PillButton size="lg" icon="plus" onClick={handleCreate}>
+              <PillButton size="lg" icon="plus" onClick={handleCreate} disabled={!oauthAvailable && mode === "none"}>
                 Create room
               </PillButton>
-              <p className="pp-hero-note">Creating a room uses your Linear connection, kept in this browser.</p>
+              <p className="pp-hero-note">
+                Creating a room means signing in with Linear first. Your teammates only need the link.
+              </p>
+              {!oauthAvailable && mode === "none" && (
+                <p className="pp-hero-note pp-muted">Linear sign-in is not set up yet. You can still try the demo.</p>
+              )}
+              {connected && (
+                <p className="pp-hero-note pp-muted">
+                  Signed in with Linear.{" "}
+                  <button type="button" className="pp-signout" onClick={signOut}>
+                    Sign out
+                  </button>
+                </p>
+              )}
             </div>
             <form className="pp-hero-join" onSubmit={handleJoin}>
               <label className="pp-field">
                 <span className="pp-field-label">Join with a code</span>
                 <input
-                  ref={joinRef}
                   className="pp-input"
                   value={joinCode}
                   placeholder="abc123"
@@ -232,34 +223,8 @@ function LandingContent() {
             )}
           </div>
         </HeroCard>
-        <SectionCard title="How it works">
-          <div className="pp-grid">
-            <LabelValue label="Step 1">Create a room or join one with its code</LabelValue>
-            <LabelValue label="Step 2">Share the link with your team</LabelValue>
-            <LabelValue label="Step 3">Vote, reveal and accept an estimate</LabelValue>
-          </div>
-        </SectionCard>
-        <SectionCard title="Linear connection" collapsible defaultOpen={false}>
-          <div className="pp-grid">
-            <LabelValue label="Status">{statusLabel}</LabelValue>
-            <LabelValue label="Where it lives">This browser only</LabelValue>
-            <LabelValue label="Our server">Never receives it</LabelValue>
-            <LabelValue label="Demo rooms">Need no connection</LabelValue>
-          </div>
-          <div className="pp-hero-create">
-            {connected ? (
-              <PillButton variant="secondary" size="sm" onClick={signOut}>
-                Disconnect
-              </PillButton>
-            ) : (
-              <PillButton size="sm" icon="link" onClick={openConnect}>
-                Connect
-              </PillButton>
-            )}
-          </div>
-        </SectionCard>
       </main>
-      <ConnectLinearModal open={connectOpen} onClose={closeConnect} connect={setKey} onConnected={handleConnected} />
+      <ConnectLinearModal open={connectOpen} onClose={closeConnect} />
     </div>
   );
 }

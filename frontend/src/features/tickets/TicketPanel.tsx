@@ -56,11 +56,13 @@ export function TicketPanel() {
           icon="plus"
           className="tk-import-btn"
           disabled={!service}
-          title={service ? undefined : "Connect Linear to import tickets"}
           onClick={() => setImportOpen(true)}
         >
           Import tickets
         </PillButton>
+      )}
+      {isHost && !service && (
+        <p className="pp-muted">Linear is not connected for this room. Create a new room to sign in.</p>
       )}
       {entries.length === 0 ? (
         <p className="tk-empty">

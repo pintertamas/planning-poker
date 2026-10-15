@@ -1,5 +1,5 @@
 import type { Estimate, Ticket } from "@shared/types";
-import { parseRefs } from "./parseRefs";
+import { identifiersFor, issueNumber, matchesIdQuery, mergeTickets, parseIdQuery, SEARCH_LIMIT } from "./searchPlan";
 import type { IssuePage, LinearService, LinearTeam, LinearView, ScaleCheck, Viewer } from "./types";
 
 const PAGE_SIZE = 5;
@@ -255,6 +255,22 @@ function pageOf(tickets: Ticket[], cursor?: string): IssuePage {
   };
 }
 
+function searchSample(all: Ticket[], query: string): Ticket[] {
+  const trimmed = query.trim();
+  if (trimmed === "") return [];
+
+  const idQuery = parseIdQuery(trimmed);
+  const exact = identifiersFor(trimmed).flatMap((ref) => all.filter((ticket) => ticket.identifier === ref));
+  const prefix = idQuery
+    ? all
+        .filter((ticket) => matchesIdQuery(ticket.identifier, idQuery))
+        .sort((a, b) => issueNumber(a.identifier) - issueNumber(b.identifier))
+    : [];
+  const needle = trimmed.toLowerCase();
+  const titled = all.filter((ticket) => ticket.title.toLowerCase().includes(needle));
+  return mergeTickets([exact, prefix, titled], SEARCH_LIMIT);
+}
+
 export function createDemoService(): LinearService {
   const estimates = new Map<string, Estimate>();
 
@@ -301,14 +317,7 @@ export function createDemoService(): LinearService {
       return byRefs(refs);
     },
     async searchIssues(query: string) {
-      const trimmed = query.trim();
-      if (trimmed === "") return [];
-      const refs = parseRefs(trimmed);
-      if (refs.length > 0) return byRefs(refs).tickets;
-      const needle = trimmed.toLowerCase();
-      return currentTickets()
-        .filter((ticket) => ticket.title.toLowerCase().includes(needle))
-        .slice(0, 25);
+      return searchSample(currentTickets(), query);
     },
     async checkEstimateScale(teamId: string): Promise<ScaleCheck> {
       if (teamId !== DEMO_TEAM.id) {

@@ -35,6 +35,21 @@ describe("demo service", () => {
     expect(tickets.map((ticket) => ticket.identifier)).toEqual(["DEMO-101"]);
   });
 
+  it("matches partial ticket IDs with or without the team key and a hash", async () => {
+    const service = createDemoService();
+    const tens = Array.from({ length: 9 }, (_, i) => `DEMO-${101 + i}`);
+    const identifiers = async (query: string) =>
+      (await service.searchIssues(query)).map((ticket) => ticket.identifier);
+
+    await expect(identifiers("DEMO-10")).resolves.toEqual(tens);
+    await expect(identifiers("demo10")).resolves.toEqual(tens);
+    await expect(identifiers("10")).resolves.toEqual(tens);
+    await expect(identifiers("#10")).resolves.toEqual(tens);
+    await expect(identifiers("#103")).resolves.toEqual(["DEMO-103"]);
+    await expect(identifiers("DEMO-11")).resolves.toEqual(["DEMO-110", "DEMO-111", "DEMO-112"]);
+    await expect(identifiers("DEMO-999")).resolves.toEqual([]);
+  });
+
   it("accepts an estimate and reflects it on the next read", async () => {
     const service = createDemoService();
     const [ticket] = (await service.issuesByRefs(["DEMO-102"])).tickets;

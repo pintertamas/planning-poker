@@ -485,11 +485,11 @@ function SearchTab({
           className="pp-input"
           type="search"
           value={query}
-          placeholder="Title, identifier or keyword"
+          placeholder="Search by ticket ID (CTTP-1234, CTTP-12 or just 1234) or by title"
           onChange={(event) => onQueryChange(event.target.value)}
         />
       </label>
-      {!term && <p className="pp-muted">Type a few words to search across Linear.</p>}
+      {!term && <p className="pp-muted">Type a full or partial ticket ID, or a few words from the title.</p>}
       {listing.busy && <Spinner label="Searching" />}
       {listing.error && <Alert tone="error">{listing.error}</Alert>}
       {term && current && (
@@ -519,7 +519,7 @@ function ImportBody({ onDone }: { onDone: () => void }) {
   const roomIds = useMemo(() => new Set(entries.map((entry) => entry.ticket.id)), [entries]);
 
   if (!service) {
-    return <p className="pp-muted">Connect Linear on this device to import tickets.</p>;
+    return <p className="pp-muted">Linear is not connected for this room. Create a new room to sign in.</p>;
   }
 
   function addTickets(tickets: Ticket[]) {

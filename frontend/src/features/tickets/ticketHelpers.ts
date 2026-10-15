@@ -25,7 +25,7 @@ export function pointsLabel(points: number): string {
 
 export function errorMessage(error: unknown): string {
   if (error instanceof LinearAuthError) {
-    return "Linear rejected the API key. Reconnect Linear on this device and try again.";
+    return "Your Linear sign-in expired. Create a new room to sign in again.";
   }
   if (error instanceof LinearError) return error.message;
   if (error instanceof Error && error.message) return error.message;

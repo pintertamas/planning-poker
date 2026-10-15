@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Ticket } from "@shared/types";
 import { LinearAuthError, LinearError } from "./client";
-import { createLiveService, createOAuthLiveService } from "./live";
+import { createOAuthLiveService } from "./live";
 import { oauthTokenStore } from "./oauth";
 import type { IssueNode } from "./mapIssue";
 
@@ -21,6 +21,19 @@ function scriptedFetch(respond: Responder) {
   });
   return { fetch: fn as unknown as typeof fetch, calls, fn };
 }
+
+function signedInService(fetchImpl: typeof fetch) {
+  oauthTokenStore.set({ accessToken: "at-test", refreshToken: null, expiresAt: Date.now() + 3_600_000 });
+  return createOAuthLiveService(fetchImpl);
+}
+
+beforeEach(() => {
+  vi.stubGlobal("localStorage", memoryStorage());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function issueNode(identifier: string, overrides: Partial<IssueNode> = {}): IssueNode {
   return {
@@ -90,7 +103,7 @@ describe("listTeams", () => {
       }
       return { errors: [{ message: "unexpected" }] };
     });
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     const first = await service.listTeams();
     const second = await service.listTeams();
@@ -128,7 +141,7 @@ describe("listTeams", () => {
         },
       };
     });
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     const teams = await service.listTeams();
 
@@ -143,7 +156,7 @@ describe("listTeams", () => {
       if (attempt === 1) return { errors: [{ message: "temporary" }] };
       return { data: { teams: { nodes: [FIBONACCI_TEAM], pageInfo: { hasNextPage: false, endCursor: null } } } };
     });
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     await expect(service.listTeams()).rejects.toBeInstanceOf(LinearError);
     await expect(service.listTeams()).resolves.toHaveLength(1);
@@ -156,7 +169,7 @@ describe("checkEstimateScale", () => {
     const mock = scriptedFetch(() => ({
       data: { teams: { nodes: teams, pageInfo: { hasNextPage: false, endCursor: null } } },
     }));
-    return createLiveService("k", mock.fetch);
+    return signedInService(mock.fetch);
   }
 
   it("reports a missing GROOMED status", async () => {
@@ -195,7 +208,7 @@ describe("commitEstimate", () => {
       }
       return { data: { teams: { nodes: teams, pageInfo: { hasNextPage: false, endCursor: null } } } };
     });
-    return { service: createLiveService("k", mock.fetch), mock };
+    return { service: signedInService(mock.fetch), mock };
   }
 
   it("sends the estimate with the groomed state id", async () => {
@@ -234,7 +247,7 @@ describe("issue paging", () => {
         },
       };
     });
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     const first = await service.issuesFromTeam("team-clfp");
     expect(first.nextCursor).toBe("cursor-1");
@@ -250,7 +263,7 @@ describe("issue paging", () => {
     const mock = scriptedFetch(() => ({
       data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
     }));
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     await service.issuesFromTeam("team-clfp");
 
@@ -269,7 +282,7 @@ describe("issue paging", () => {
         },
       },
     }));
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     const page = await service.issuesFromView("view-1", "start");
 
@@ -287,7 +300,7 @@ describe("issuesByRefs", () => {
       },
       errors: [{ message: "Entity not found: Issue", path: ["r1"] }],
     }));
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     const result = await service.issuesByRefs(["CLFP-123", "NOPE-999"]);
 
@@ -301,29 +314,182 @@ describe("issuesByRefs", () => {
 
   it("does not call Linear when there is nothing to resolve", async () => {
     const mock = scriptedFetch(() => ({ data: {} }));
-    const service = createLiveService("k", mock.fetch);
+    const service = signedInService(mock.fetch);
 
     await expect(service.issuesByRefs([])).resolves.toEqual({ tickets: [], notFound: [] });
     expect(mock.fn).not.toHaveBeenCalled();
   });
 
-  it("routes free text with identifiers through issuesByRefs in searchIssues", async () => {
-    const mock = scriptedFetch(() => ({ data: { r0: issueNode("ENG-7") } }));
-    const service = createLiveService("k", mock.fetch);
+});
 
-    const tickets = await service.searchIssues("see eng-7");
+function operationName(call: Call): string {
+  return /query (\w+)/.exec(call.query)?.[1] ?? "";
+}
 
-    expect(mock.calls[0]?.variables).toEqual({ r0: "ENG-7" });
-    expect(tickets.map((ticket) => ticket.identifier)).toEqual(["ENG-7"]);
+function callsTo(calls: Call[], name: string): Call[] {
+  return calls.filter((call) => operationName(call) === name);
+}
+
+function routedFetch(routes: Record<string, Responder>) {
+  return scriptedFetch((call) => {
+    const route = routes[operationName(call)];
+    return route ? route(call) : { errors: [{ message: `unrouted ${operationName(call)}` }] };
+  });
+}
+
+const RANGES_FOR_12 = [
+  { number: { gte: 12, lte: 12 } },
+  { number: { gte: 120, lte: 129 } },
+  { number: { gte: 1200, lte: 1299 } },
+  { number: { gte: 12000, lte: 12999 } },
+];
+
+const EMPTY_ISSUES = { data: { issues: { nodes: [] } } };
+const EMPTY_REFS = { data: { r0: null } };
+const EMPTY_FULL_TEXT = { data: { searchIssues: { nodes: [] } } };
+
+describe("searchIssues", () => {
+  it("sends a team-scoped number range filter, an exact lookup and a title search for a ticket ID", async () => {
+    const mock = routedFetch({
+      IssuesByRef: () => EMPTY_REFS,
+      IssuesByNumber: () => EMPTY_ISSUES,
+      SearchIssues: () => EMPTY_ISSUES,
+      FullTextSearch: () => EMPTY_FULL_TEXT,
+    });
+    const service = signedInService(mock.fetch);
+
+    await service.searchIssues("CTTP-12");
+
+    expect(callsTo(mock.calls, "IssuesByNumber")[0]?.variables.filter).toEqual({
+      and: [{ team: { key: { eqIgnoreCase: "CTTP" } } }, { or: RANGES_FOR_12 }],
+    });
+    expect(callsTo(mock.calls, "IssuesByRef")[0]?.variables).toEqual({ r0: "CTTP-12" });
+    expect(callsTo(mock.calls, "SearchIssues")[0]?.variables).toEqual({
+      filter: { title: { containsIgnoreCase: "CTTP-12" } },
+    });
   });
 
-  it("searches titles when there are no identifiers", async () => {
-    const mock = scriptedFetch(() => ({ data: { issues: { nodes: [issueNode("CLFP-4")] } } }));
-    const service = createLiveService("k", mock.fetch);
+  it("sends the number ranges without a team clause for a bare number", async () => {
+    const mock = routedFetch({
+      IssuesByRef: () => EMPTY_REFS,
+      IssuesByNumber: () => EMPTY_ISSUES,
+      SearchIssues: () => EMPTY_ISSUES,
+      FullTextSearch: () => EMPTY_FULL_TEXT,
+    });
+    const service = signedInService(mock.fetch);
+
+    await service.searchIssues("#12");
+
+    expect(callsTo(mock.calls, "IssuesByNumber")[0]?.variables.filter).toEqual({ and: [{ or: RANGES_FOR_12 }] });
+    expect(callsTo(mock.calls, "IssuesByRef")).toHaveLength(0);
+  });
+
+  it("skips the number prefix for a multi-word query and still resolves the exact ref and title search", async () => {
+    const mock = routedFetch({
+      IssuesByRef: () => EMPTY_REFS,
+      IssuesByNumber: () => EMPTY_ISSUES,
+      SearchIssues: () => EMPTY_ISSUES,
+      FullTextSearch: () => EMPTY_FULL_TEXT,
+    });
+    const service = signedInService(mock.fetch);
+
+    await service.searchIssues("CTTP-12 retry");
+
+    expect(callsTo(mock.calls, "IssuesByNumber")).toHaveLength(0);
+    expect(callsTo(mock.calls, "IssuesByRef")[0]?.variables).toEqual({ r0: "CTTP-12" });
+    expect(callsTo(mock.calls, "SearchIssues")[0]?.variables).toEqual({
+      filter: { title: { containsIgnoreCase: "CTTP-12 retry" } },
+    });
+  });
+
+  it("merges exact, number prefix, title and full-text results in priority order without duplicates", async () => {
+    const mock = routedFetch({
+      IssuesByRef: () => ({ data: { r0: issueNode("CLFP-12") } }),
+      IssuesByNumber: () => ({
+        data: { issues: { nodes: [issueNode("CLFP-125"), issueNode("CLFP-12"), issueNode("CLFP-120")] } },
+      }),
+      SearchIssues: () => ({ data: { issues: { nodes: [issueNode("CLFP-300"), issueNode("CLFP-120")] } } }),
+      FullTextSearch: () => ({
+        data: {
+          searchIssues: {
+            nodes: [
+              { id: "id-CLFP-9", identifier: "CLFP-9" },
+              { id: "id-CLFP-300", identifier: "CLFP-300" },
+            ],
+          },
+        },
+      }),
+      IssuesByIds: () => ({ data: { issues: { nodes: [issueNode("CLFP-300"), issueNode("CLFP-9")] } } }),
+    });
+    const service = signedInService(mock.fetch);
+
+    const tickets = await service.searchIssues("CLFP-12");
+
+    expect(tickets.map((ticket) => ticket.identifier)).toEqual([
+      "CLFP-12",
+      "CLFP-120",
+      "CLFP-125",
+      "CLFP-300",
+      "CLFP-9",
+    ]);
+    expect(callsTo(mock.calls, "IssuesByIds")[0]?.variables).toEqual({ ids: ["id-CLFP-9", "id-CLFP-300"] });
+  });
+
+  it("keeps the results of the other sub-queries when one fails", async () => {
+    const mock = routedFetch({
+      IssuesByRef: () => ({ data: { r0: issueNode("CLFP-12") } }),
+      IssuesByNumber: () => ({ errors: [{ message: "Complexity too high" }] }),
+      SearchIssues: () => ({ data: { issues: { nodes: [issueNode("CLFP-7")] } } }),
+      FullTextSearch: () => EMPTY_FULL_TEXT,
+    });
+    const service = signedInService(mock.fetch);
+
+    const tickets = await service.searchIssues("CLFP-12");
+
+    expect(tickets.map((ticket) => ticket.identifier)).toEqual(["CLFP-12", "CLFP-7"]);
+  });
+
+  it("rethrows the first error when every sub-query fails", async () => {
+    const fetchMock = vi.fn(async () => new Response("unavailable", { status: 500 }));
+    const service = signedInService(fetchMock as unknown as typeof fetch);
+
+    await expect(service.searchIssues("CLFP-12")).rejects.toThrow("Linear request failed with HTTP 500.");
+  });
+
+  it("rethrows an auth error even when other sub-queries succeed", async () => {
+    const mock = routedFetch({
+      IssuesByRef: () => ({ data: { r0: issueNode("CLFP-12") } }),
+      IssuesByNumber: () => ({
+        errors: [{ message: "Authentication required", extensions: { type: "authentication error" } }],
+      }),
+      SearchIssues: () => ({ data: { issues: { nodes: [issueNode("CLFP-7")] } } }),
+      FullTextSearch: () => EMPTY_FULL_TEXT,
+    });
+    const service = signedInService(mock.fetch);
+
+    await expect(service.searchIssues("CLFP-12")).rejects.toBeInstanceOf(LinearAuthError);
+  });
+
+  it("trims the title search term", async () => {
+    const mock = routedFetch({
+      SearchIssues: () => EMPTY_ISSUES,
+      FullTextSearch: () => EMPTY_FULL_TEXT,
+    });
+    const service = signedInService(mock.fetch);
 
     await service.searchIssues("  webhook retry ");
 
-    expect(mock.calls[0]?.variables).toEqual({ filter: { title: { containsIgnoreCase: "webhook retry" } } });
+    expect(callsTo(mock.calls, "SearchIssues")[0]?.variables).toEqual({
+      filter: { title: { containsIgnoreCase: "webhook retry" } },
+    });
+  });
+
+  it("returns nothing and sends nothing for a blank query", async () => {
+    const mock = routedFetch({});
+    const service = signedInService(mock.fetch);
+
+    await expect(service.searchIssues("   ")).resolves.toEqual([]);
+    expect(mock.fn).not.toHaveBeenCalled();
   });
 });
 
@@ -354,11 +520,9 @@ describe("createOAuthLiveService", () => {
 
   beforeEach(() => {
     vi.stubEnv("VITE_LINEAR_CLIENT_ID", "client-123");
-    vi.stubGlobal("localStorage", memoryStorage());
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });

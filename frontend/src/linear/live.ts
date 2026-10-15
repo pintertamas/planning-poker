@@ -1,8 +1,16 @@
 import type { Estimate, Ticket } from "@shared/types";
-import { createGraphqlClient, LinearError, type AuthProvider, type GraphqlClient } from "./client";
+import { createGraphqlClient, LinearAuthError, LinearError, type AuthProvider, type GraphqlClient } from "./client";
 import { ISSUE_FIELDS, mapIssue, type IssueNode } from "./mapIssue";
 import { getAccessToken } from "./oauth";
-import { parseRefs } from "./parseRefs";
+import {
+  identifiersFor,
+  issueNumber,
+  mergeTickets,
+  numberPrefixRanges,
+  parseIdQuery,
+  type IdQuery,
+  type NumberRange,
+} from "./searchPlan";
 import type { IssuePage, LinearService, LinearTeam, LinearView, ScaleCheck, Viewer } from "./types";
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
@@ -87,6 +95,30 @@ const SEARCH_QUERY = `
   }
 `;
 
+const NUMBER_PREFIX_QUERY = `
+  query IssuesByNumber($filter: IssueFilter) {
+    issues(filter: $filter, first: 50) {
+      nodes { ${ISSUE_FIELDS} }
+    }
+  }
+`;
+
+const FULL_TEXT_QUERY = `
+  query FullTextSearch($term: String!) {
+    searchIssues(term: $term, first: 25) {
+      nodes { id identifier }
+    }
+  }
+`;
+
+const ISSUES_BY_ID_QUERY = `
+  query IssuesByIds($ids: [ID!]!) {
+    issues(filter: { id: { in: $ids } }, first: 25) {
+      nodes { ${ISSUE_FIELDS} }
+    }
+  }
+`;
+
 const SET_ESTIMATE_MUTATION = `
   mutation SetEstimate($id: String!, $estimate: Int, $stateId: String) {
     issueUpdate(id: $id, input: { estimate: $estimate, stateId: $stateId }) {
@@ -143,7 +175,7 @@ async function fetchTeams(client: GraphqlClient): Promise<LinearTeam[]> {
   return nodes.map(toTeam);
 }
 
-function buildLiveService(auth: string | AuthProvider, fetchImpl: typeof fetch): LinearService {
+function buildLiveService(auth: AuthProvider, fetchImpl: typeof fetch): LinearService {
   const client = createGraphqlClient(auth, fetchImpl);
   let teamsCache: Promise<LinearTeam[]> | null = null;
 
@@ -223,20 +255,63 @@ function buildLiveService(auth: string | AuthProvider, fetchImpl: typeof fetch):
     return { tickets, notFound };
   }
 
+  async function issuesByNumberPrefix(query: IdQuery, ranges: NumberRange[]): Promise<Ticket[]> {
+    const teamClause: { team: { key: { eqIgnoreCase: string } } }[] =
+      query.teamKey === null ? [] : [{ team: { key: { eqIgnoreCase: query.teamKey } } }];
+    const filter = {
+      and: [...teamClause, { or: ranges.map((range) => ({ number: { gte: range.gte, lte: range.lte } })) }],
+    };
+    const data = await client.query<{ issues: { nodes: IssueNode[] } }>(NUMBER_PREFIX_QUERY, { filter });
+    return data.issues.nodes
+      .slice()
+      .sort((a, b) => issueNumber(a.identifier) - issueNumber(b.identifier))
+      .map(mapIssue);
+  }
+
+  async function titleMatches(term: string): Promise<Ticket[]> {
+    const data = await client.query<{ issues: { nodes: IssueNode[] } }>(SEARCH_QUERY, {
+      filter: { title: { containsIgnoreCase: term } },
+    });
+    return data.issues.nodes.map(mapIssue);
+  }
+
+  async function fullTextMatches(term: string): Promise<Ticket[]> {
+    const hits = await client.query<{ searchIssues: { nodes: { id: string }[] } }>(FULL_TEXT_QUERY, { term });
+    const ids = hits.searchIssues.nodes.map((node) => node.id);
+    if (ids.length === 0) return [];
+
+    const data = await client.query<{ issues: { nodes: IssueNode[] } }>(ISSUES_BY_ID_QUERY, { ids });
+    const byId = new Map(data.issues.nodes.map((node) => [node.id, node] as const));
+    return ids.flatMap((id) => {
+      const node = byId.get(id);
+      return node ? [mapIssue(node)] : [];
+    });
+  }
+
   async function searchIssues(query: string): Promise<Ticket[]> {
     const trimmed = query.trim();
     if (trimmed === "") return [];
 
-    const refs = parseRefs(trimmed);
-    if (refs.length > 0) {
-      const resolved = await issuesByRefs(refs);
-      return resolved.tickets;
-    }
+    const idQuery = parseIdQuery(trimmed);
+    const ranges = idQuery ? numberPrefixRanges(idQuery.digits) : [];
+    const refs = identifiersFor(trimmed);
 
-    const data = await client.query<{ issues: { nodes: IssueNode[] } }>(SEARCH_QUERY, {
-      filter: { title: { containsIgnoreCase: trimmed } },
-    });
-    return data.issues.nodes.map(mapIssue);
+    const tasks: Promise<Ticket[]>[] = [];
+    if (refs.length > 0) tasks.push(issuesByRefs(refs).then((resolved) => resolved.tickets));
+    if (idQuery && ranges.length > 0) tasks.push(issuesByNumberPrefix(idQuery, ranges));
+    tasks.push(titleMatches(trimmed));
+    tasks.push(fullTextMatches(trimmed));
+
+    const settled = await Promise.allSettled(tasks);
+    const failures: unknown[] = [];
+    for (const result of settled) {
+      if (result.status === "rejected") failures.push(result.reason);
+    }
+    const authFailure = failures.find((reason) => reason instanceof LinearAuthError);
+    if (authFailure !== undefined) throw authFailure;
+    if (failures.length === settled.length) throw failures[0];
+
+    return mergeTickets(settled.map((result) => (result.status === "fulfilled" ? result.value : [])));
   }
 
   async function checkEstimateScale(teamId: string): Promise<ScaleCheck> {
@@ -285,10 +360,6 @@ function buildLiveService(auth: string | AuthProvider, fetchImpl: typeof fetch):
     checkEstimateScale,
     commitEstimate,
   };
-}
-
-export function createLiveService(apiKey: string, fetchImpl: typeof fetch = fetch): LinearService {
-  return buildLiveService(apiKey, fetchImpl);
 }
 
 export function createOAuthLiveService(fetchImpl: typeof fetch = fetch): LinearService {

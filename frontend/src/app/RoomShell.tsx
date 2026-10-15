@@ -1,19 +1,16 @@
-import { useState } from "react";
 import { RailNav, SidePanel, PillButton } from "../ui";
 import { TicketPanel } from "../features/tickets/TicketPanel";
 import { TicketStage } from "../features/tickets/TicketStage";
 import { TableSection } from "../features/table/TableSection";
 import { ResultsSection } from "../features/table/ResultsSection";
 import { useRoomApi } from "../net/api";
-import { ConnectLinearModal } from "./ConnectLinearModal";
 import { useLinear } from "./linearContext";
 import { navigate } from "./router";
 import { RoomTopBar } from "./RoomTopBar";
 
 export function RoomShell() {
-  const { mode, setKey } = useLinear();
+  const { mode } = useLinear();
   const room = useRoomApi();
-  const [connectOpen, setConnectOpen] = useState(false);
 
   return (
     <div className="pp-app">
@@ -23,7 +20,7 @@ export function RoomShell() {
           { id: "tickets", label: "Tickets", icon: "tickets", onClick: () => undefined },
           { id: "settings", label: "Settings", icon: "settings", onClick: () => undefined },
         ]}
-        bottom={[{ id: "signout", label: "Sign out", icon: "signout", onClick: () => navigate("/") }]}
+        bottom={[{ id: "leave", label: "Leave", icon: "signout", onClick: () => navigate("/") }]}
       />
       <SidePanel title="Tickets">
         <TicketPanel />
@@ -32,9 +29,12 @@ export function RoomShell() {
         <RoomTopBar />
         {mode === "none" && room.me?.isHost && (
           <div className="pp-alert pp-alert--notice" role="status">
-            <span className="pp-alert-text">Connect Linear on this device to load tickets.</span>
-            <PillButton size="sm" onClick={() => setConnectOpen(true)}>
-              Connect Linear
+            <span className="pp-alert-text">
+              Your Linear sign-in is no longer active, so tickets cannot be loaded or updated. Go back to the start and
+              create a new room to sign in again.
+            </span>
+            <PillButton size="sm" onClick={() => navigate("/")}>
+              Back to start
             </PillButton>
           </div>
         )}
@@ -42,12 +42,6 @@ export function RoomShell() {
         <TableSection />
         <ResultsSection />
       </main>
-      <ConnectLinearModal
-        open={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        connect={setKey}
-        onConnected={() => setConnectOpen(false)}
-      />
     </div>
   );
 }
