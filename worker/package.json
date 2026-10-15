@@ -1,0 +1,14 @@
+{
+  "name": "planning-poker-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.0",
+    "@cloudflare/workers-types": "5.20261015.1"
+  }
+}
