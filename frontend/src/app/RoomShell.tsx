@@ -4,6 +4,7 @@ import { TicketPanel } from "../features/tickets/TicketPanel";
 import { TicketStage } from "../features/tickets/TicketStage";
 import { TableSection } from "../features/table/TableSection";
 import { ResultsSection } from "../features/table/ResultsSection";
+import { useRoomApi } from "../net/api";
 import { ConnectLinearModal } from "./ConnectLinearModal";
 import { useLinear } from "./linearContext";
 import { navigate } from "./router";
@@ -11,6 +12,7 @@ import { RoomTopBar } from "./RoomTopBar";
 
 export function RoomShell() {
   const { mode, setKey } = useLinear();
+  const room = useRoomApi();
   const [connectOpen, setConnectOpen] = useState(false);
 
   return (
@@ -28,7 +30,7 @@ export function RoomShell() {
       </SidePanel>
       <main className="pp-main">
         <RoomTopBar />
-        {mode === "none" && (
+        {mode === "none" && room.me?.isHost && (
           <div className="pp-alert pp-alert--notice" role="status">
             <span className="pp-alert-text">Connect Linear on this device to load tickets.</span>
             <PillButton size="sm" onClick={() => setConnectOpen(true)}>
