@@ -18,7 +18,7 @@ export function HostControls({ phase, settings, send }: { phase: RoundPhase; set
         )}
         {phase === "voting" && (
           <>
-            <PillButton onClick={() => send({ type: "reveal" })}>Reveal now</PillButton>
+            <PillButton onClick={() => send({ type: "reveal" })}>Reveal estimates</PillButton>
             <PillButton variant="ghost" icon="refresh" onClick={() => send({ type: "revote" })}>
               Restart
             </PillButton>
@@ -52,7 +52,7 @@ export function HostControls({ phase, settings, send }: { phase: RoundPhase; set
         </div>
         <Toggle
           checked={settings.autoRevealWhenAllVoted}
-          label="Reveal when everyone has voted"
+          label="Reveal automatically when everyone has voted"
           onChange={(value) => send({ type: "updateSettings", autoRevealWhenAllVoted: value })}
         />
       </div>

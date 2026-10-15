@@ -319,7 +319,7 @@ export function createRoom(code: string, now: number): ServerRoom {
     },
     settings: {
       durationSec: DEFAULT_TIMER_SEC,
-      autoRevealWhenAllVoted: true,
+      autoRevealWhenAllVoted: false,
     },
   };
 }

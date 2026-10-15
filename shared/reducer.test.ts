@@ -97,7 +97,7 @@ describe("createRoom", () => {
         votes: {},
         revealed: null,
       },
-      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
+      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: false },
     });
   });
 });
@@ -271,8 +271,33 @@ describe("vote", () => {
     expect(JSON.stringify(pub)).not.toMatch(/"a":\s*5\b/);
   });
 
-  it("auto-reveals once every connected player has voted", () => {
+  it("keeps the public state identical across a vote change while voting", () => {
+    const first = act(votingRoom(T0), { type: "vote", value: 3 }, as("a"));
+    const changed = act(first, { type: "vote", value: 8 }, as("a"));
+    const before = toPublicState(first, T0 + 1);
+    const after = toPublicState(changed, T0 + 1);
+    expect(after.round).toEqual(before.round);
+    expect(after.round).toEqual({
+      phase: "voting",
+      durationSec: DEFAULT_TIMER_SEC,
+      endsAt: T0 + DEFAULT_TIMER_SEC * 1000,
+      voted: { h: false, a: true, b: false },
+      votes: null,
+    });
+  });
+
+  it("does not auto-reveal with the default settings once everyone has voted", () => {
     let room = act(votingRoom(), { type: "vote", value: 3 }, as("a"));
+    room = act(room, { type: "vote", value: 8 }, HOST);
+    room = act(room, { type: "vote", value: 5 }, as("b"), T0 + 2000);
+    expect(room.settings.autoRevealWhenAllVoted).toBe(false);
+    expect(room.round.phase).toBe("voting");
+    expect(room.round.revealed).toBeNull();
+  });
+
+  it("auto-reveals once every connected player has voted when the setting is on", () => {
+    let room = act(votingRoom(), { type: "updateSettings", autoRevealWhenAllVoted: true });
+    room = act(room, { type: "vote", value: 3 }, as("a"));
     room = act(room, { type: "vote", value: 8 }, HOST);
     expect(room.round.phase).toBe("voting");
     room = act(room, { type: "vote", value: 5 }, as("b"), T0 + 2000);
@@ -310,12 +335,21 @@ describe("leave", () => {
   });
 
   it("auto-reveals when a straggler leaves and everyone remaining has voted", () => {
-    let room = act(votingRoom(), { type: "vote", value: 3 }, as("a"));
+    let room = act(votingRoom(), { type: "updateSettings", autoRevealWhenAllVoted: true });
+    room = act(room, { type: "vote", value: 3 }, as("a"));
     room = act(room, { type: "vote", value: 5 }, HOST);
     expect(room.round.phase).toBe("voting");
     room = act(room, { type: "leave", playerId: "b" }, as("b"), T0 + 3000);
     expect(room.round.phase).toBe("revealed");
     expect(room.round.revealed).toEqual({ h: 5, a: 3 });
+  });
+
+  it("does not reveal when a straggler leaves under the default settings", () => {
+    let room = act(votingRoom(), { type: "vote", value: 3 }, as("a"));
+    room = act(room, { type: "vote", value: 5 }, HOST);
+    room = act(room, { type: "leave", playerId: "b" }, as("b"), T0 + 3000);
+    expect(room.round.phase).toBe("voting");
+    expect(room.round.revealed).toBeNull();
   });
 
   it("does not reveal when nobody is left connected", () => {
@@ -356,6 +390,16 @@ describe("reveal", () => {
     const pub = toPublicState(room, T0 + 10);
     expect(pub.round.votes).toEqual({ h: COFFEE, a: 2, b: COFFEE });
     expect(pub.round.voted).toEqual({ h: false, a: true, b: false });
+  });
+
+  it("reveals the latest vote of every player and coffee for each non-voter", () => {
+    let room = act(votingRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "vote", value: 2 }, as("a"));
+    room = act(room, { type: "vote", value: 8 }, HOST);
+    room = act(room, { type: "reveal" });
+    const pub = toPublicState(room, T0 + 10);
+    expect(pub.round.votes).toEqual({ h: 8, a: 2, b: COFFEE });
+    expect(pub.round.voted).toEqual({ h: true, a: true, b: false });
   });
 });
 
@@ -734,7 +778,7 @@ describe("toPublicState", () => {
       tickets: room.tickets,
       currentTicketId: "t1",
       round: { phase: "idle", durationSec: DEFAULT_TIMER_SEC, endsAt: null, voted: { h: false, a: false, b: false }, votes: null },
-      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
+      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: false },
       serverNow: T0 + 42,
     });
     expect(pub.players).not.toBe(room.players);

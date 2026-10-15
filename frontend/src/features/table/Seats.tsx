@@ -6,25 +6,54 @@ import { PlayingCard } from "./PlayingCard";
 import { orderSeats, seatLabel, seatSlot, type SeatSlot } from "./seating";
 import "./table.css";
 
-export function Seats({ players, round, selfId }: { players: Player[]; round: Round; selfId: string | null }) {
+export function Seats({
+  players,
+  round,
+  selfId,
+  animate = false,
+}: {
+  players: Player[];
+  round: Round;
+  selfId: string | null;
+  animate?: boolean;
+}) {
   const ordered = orderSeats(players);
   return (
     <ul className="pp-seats" aria-label="Players">
       {ordered.map((player, index) => (
-        <Seat key={player.id} player={player} round={round} index={index} isSelf={player.id === selfId} />
+        <Seat
+          key={player.id}
+          player={player}
+          round={round}
+          index={index}
+          isSelf={player.id === selfId}
+          animate={animate}
+        />
       ))}
     </ul>
   );
 }
 
-function Seat({ player, round, index, isSelf }: { player: Player; round: Round; index: number; isSelf: boolean }) {
+function Seat({
+  player,
+  round,
+  index,
+  isSelf,
+  animate,
+}: {
+  player: Player;
+  round: Round;
+  index: number;
+  isSelf: boolean;
+  animate: boolean;
+}) {
   const slot = seatSlot(round, player.id);
   const stagger = { "--i": index } as CSSProperties;
 
   return (
     <li className={cx("pp-seat", !player.connected && "is-offline")}>
       <div className="pp-seat-slot">
-        <SeatCard slot={slot} stagger={stagger} />
+        <SeatCard slot={slot} stagger={stagger} animate={animate} />
       </div>
       <span className="pp-table-sr">{seatLabel(slot)}</span>
       <div className="pp-seat-id">
@@ -39,7 +68,7 @@ function Seat({ player, round, index, isSelf }: { player: Player; round: Round; 
   );
 }
 
-function SeatCard({ slot, stagger }: { slot: SeatSlot; stagger: CSSProperties }) {
+function SeatCard({ slot, stagger, animate }: { slot: SeatSlot; stagger: CSSProperties; animate: boolean }) {
   switch (slot.kind) {
     case "empty":
       return <span className="pp-seat-empty" aria-hidden="true" />;
@@ -58,6 +87,12 @@ function SeatCard({ slot, stagger }: { slot: SeatSlot; stagger: CSSProperties })
     case "hidden":
       return <PlayingCard value={null} className="is-dealing" style={stagger} />;
     case "value":
-      return <PlayingCard value={slot.value} className="is-flipping" style={stagger} />;
+      return (
+        <PlayingCard
+          value={slot.value}
+          className={animate ? "is-flipping" : "is-revealed"}
+          style={stagger}
+        />
+      );
   }
 }

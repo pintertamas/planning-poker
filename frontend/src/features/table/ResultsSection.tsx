@@ -3,9 +3,13 @@ import { ALLOWED_ESTIMATES } from "@shared/types";
 import type { Estimate, RoomState } from "@shared/types";
 import { summarize } from "@shared/stats";
 import { Chip, Icon, LabelValue, PillButton, SectionCard } from "../../ui";
+import { cx } from "../../ui/cx";
 import { useRoomApi, type RoomApi } from "../../net/api";
 import { DistributionBars } from "./DistributionBars";
+import { prefersReducedMotion, scrollBehavior } from "./motion";
 import { currentEntry, roundKey, votersByEstimate } from "./round";
+import { useCountUp } from "./useCountUp";
+import { useRevealTransition } from "./useRevealTransition";
 import "./table.css";
 
 type Send = RoomApi["send"];
@@ -25,21 +29,28 @@ export function ResultsSection() {
   );
 }
 
+function CountUp({ target, animate }: { target: number; animate: boolean }) {
+  const value = useCountUp(target, animate);
+  return <>{value}</>;
+}
+
 function ResultsBody({ state, isHost, send }: { state: RoomState; isHost: boolean; send: Send }) {
   const entry = currentEntry(state);
   const key = roundKey(state);
   const revealed = state.round.phase === "revealed";
+  const animate = useRevealTransition(state.round.phase, state.currentTicketId);
   const votes = state.round.votes ?? {};
   const summary = summarize(votes);
   const [pick, setPick] = useState<{ key: string; value: Estimate | null } | null>(null);
   const chosen = pick !== null && pick.key === key ? pick.value : summary.suggested;
-  const celebrateKey = revealed && summary.consensus ? key : null;
+  const celebrateKey = animate && revealed && summary.consensus ? key : null;
   const celebrated = useRef<string | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (celebrateKey === null || celebrated.current === celebrateKey) return undefined;
     celebrated.current = celebrateKey;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    if (prefersReducedMotion()) return undefined;
     void import("canvas-confetti")
       .then(({ default: confetti }) =>
         confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: CONFETTI_COLORS }),
@@ -48,12 +59,18 @@ function ResultsBody({ state, isHost, send }: { state: RoomState; isHost: boolea
     return undefined;
   }, [celebrateKey]);
 
+  useEffect(() => {
+    if (!animate || panel.current === null) return undefined;
+    panel.current.scrollIntoView({ behavior: scrollBehavior(prefersReducedMotion()), block: "nearest" });
+    return undefined;
+  }, [animate]);
+
   if (entry === null) {
     return <p className="pp-muted">No ticket is selected.</p>;
   }
 
   return (
-    <div className="pp-results">
+    <div ref={panel} className={cx("pp-results", animate && "is-entering")}>
       <div className="pp-results-head">
         <div className="pp-results-ticket">
           <span className="pp-results-id">{entry.ticket.identifier}</span>
@@ -66,11 +83,17 @@ function ResultsBody({ state, isHost, send }: { state: RoomState; isHost: boolea
         <p className="pp-muted">Results appear here once the cards are revealed.</p>
       ) : (
         <>
-          <DistributionBars counts={summary.counts} voters={votersByEstimate(votes, state.players)} />
+          <DistributionBars counts={summary.counts} voters={votersByEstimate(votes, state.players)} animate={animate} />
           <div className="pp-grid">
-            <LabelValue label="Average">{summary.average ?? "–"}</LabelValue>
-            <LabelValue label="Median">{summary.median ?? "–"}</LabelValue>
-            <LabelValue label="Most voted">{summary.mode ?? "–"}</LabelValue>
+            <LabelValue label="Average">
+              {summary.average === null ? "–" : <CountUp target={summary.average} animate={animate} />}
+            </LabelValue>
+            <LabelValue label="Median">
+              {summary.median === null ? "–" : <CountUp target={summary.median} animate={animate} />}
+            </LabelValue>
+            <LabelValue label="Most voted">
+              {summary.mode === null ? "–" : <CountUp target={summary.mode} animate={animate} />}
+            </LabelValue>
             <LabelValue label="Coffee">
               <span className="pp-coffee-count">
                 <Icon name="coffee" size={14} />

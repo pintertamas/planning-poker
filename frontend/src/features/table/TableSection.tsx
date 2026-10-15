@@ -7,6 +7,7 @@ import { HostControls } from "./HostControls";
 import { Seats } from "./Seats";
 import { TimerRing } from "./TimerRing";
 import { useCountdown } from "./useCountdown";
+import { useRevealTransition } from "./useRevealTransition";
 import { currentEntry, estimateFromKey, roundKey } from "./round";
 import "./table.css";
 
@@ -55,6 +56,7 @@ function TableBody({
   const [pick, setPick] = useState<{ key: string; value: Estimate } | null>(null);
   const selected = pick !== null && pick.key === key ? pick.value : null;
   const isHost = me?.isHost === true;
+  const revealing = useRevealTransition(round.phase, state.currentTicketId);
 
   const vote = useCallback(
     (value: Estimate) => {
@@ -89,7 +91,12 @@ function TableBody({
   return (
     <div className="pp-table">
       <div className="pp-table-top">
-        <TimerRing remainingMs={remaining} durationSec={live ? round.durationSec : settings.durationSec} phase={round.phase} />
+        <TimerRing
+          remainingMs={remaining}
+          durationSec={live ? round.durationSec : settings.durationSec}
+          phase={round.phase}
+          animate={revealing}
+        />
         <div className="pp-table-controls">
           {isHost ? (
             <HostControls phase={round.phase} settings={settings} send={send} />
@@ -100,7 +107,13 @@ function TableBody({
           )}
         </div>
       </div>
-      <Seats key={`seats-${key}`} players={players} round={round} selfId={me?.playerId ?? null} />
+      <Seats
+        key={`seats-${key}`}
+        players={players}
+        round={round}
+        selfId={me?.playerId ?? null}
+        animate={revealing}
+      />
       <CardDeck key={`deck-${key}`} phase={round.phase} selected={selected} onVote={vote} />
     </div>
   );

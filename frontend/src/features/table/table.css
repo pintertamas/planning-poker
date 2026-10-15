@@ -7,6 +7,30 @@
   }
 }
 
+@keyframes pp-peak-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 -6px 14px 2px color-mix(in srgb, var(--pink-accent) 60%, transparent);
+  }
+}
+
+@keyframes pp-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .pp-table {
   display: flex;
   flex-direction: column;
@@ -102,6 +126,20 @@
 
 .pp-timer.is-muted {
   color: var(--ink-faint);
+}
+
+.pp-timer.is-done {
+  color: var(--green);
+}
+
+.pp-timer-check {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.pp-timer-check.is-popping {
+  animation: pp-pop var(--dur-med) var(--ease-spring) backwards;
 }
 
 .pp-timer.is-warning {
@@ -292,6 +330,10 @@
   animation-delay: calc(var(--dur-fast) * var(--i, 0));
 }
 
+.pp-playing-card.is-revealed .pp-cup {
+  animation: none;
+}
+
 .pp-card-numeral {
   font-size: 1.5rem;
   font-weight: var(--font-weight-display);
@@ -390,11 +432,20 @@
   background: var(--ink);
   transform-origin: bottom;
   transition: height var(--dur-slow) var(--ease-out);
-  animation: pp-grow var(--dur-slow) var(--ease-out) backwards;
 }
 
 .pp-bar-fill.is-peak {
   background: var(--pink-accent);
+}
+
+.pp-bar-fill.is-growing {
+  animation: pp-grow var(--dur-slow) var(--ease-out) var(--bar-delay, 0ms) backwards;
+}
+
+.pp-bar-fill.is-peak.is-growing {
+  animation:
+    pp-grow var(--dur-slow) var(--ease-out) var(--bar-delay, 0ms) backwards,
+    pp-peak-glow var(--dur-slow) var(--ease-out) calc(var(--bar-delay, 0ms) + var(--dur-slow)) 2;
 }
 
 .pp-bar-value {
@@ -415,6 +466,10 @@
   flex-direction: column;
   gap: 18px;
   min-width: 0;
+}
+
+.pp-results.is-entering {
+  animation: fade-up var(--dur-med) var(--ease-out) backwards;
 }
 
 .pp-results-head {
