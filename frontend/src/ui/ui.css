@@ -798,3 +798,49 @@ button.pp-side-row:hover:not(.is-active) {
   background: var(--red);
   color: var(--white);
 }
+
+.pp-connect-primary {
+  width: 100%;
+}
+
+.pp-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+.pp-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-label);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.pp-divider::before,
+.pp-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1.5px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.pp-disclosure summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-strong);
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.pp-disclosure[open] > summary {
+  margin-bottom: 14px;
+}

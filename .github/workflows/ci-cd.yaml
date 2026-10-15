@@ -113,6 +113,7 @@ jobs:
         env:
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH != '' && vars.VITE_BASE_PATH || format('/{0}/', github.event.repository.name) }}
           VITE_WS_BASE_URL: ${{ needs.deploy-worker.outputs.url || vars.VITE_WS_BASE_URL }}
+          VITE_LINEAR_CLIENT_ID: ${{ vars.LINEAR_CLIENT_ID }}
         run: npm run build
 
       - name: Configure Pages

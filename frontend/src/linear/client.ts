@@ -14,7 +14,13 @@ export class LinearAuthError extends LinearError {
 
 const ENDPOINT = "https://api.linear.app/graphql";
 const AUTH_MESSAGE = "Linear rejected the API key. Check that it is correct and still active.";
+const SIGN_IN_EXPIRED_MESSAGE = "Your Linear sign-in expired. Sign in again.";
 const NETWORK_MESSAGE = "Could not reach Linear. Check your connection and try again.";
+
+export type AuthProvider = {
+  getHeader(): Promise<string | null>;
+  refresh?(): Promise<boolean>;
+};
 
 export type GraphqlError = {
   message: string;
@@ -31,8 +37,14 @@ export type GraphqlClient = {
 
 type GraphqlBody<T> = { data?: T | null; errors?: GraphqlError[] };
 
+type Attempt<T> = { response: Response; body: GraphqlBody<T> | null; errors: GraphqlError[] };
+
 function isAuthError(error: GraphqlError): boolean {
   return error.extensions?.type === "authentication error";
+}
+
+function isAuthFailure<T>(attempt: Attempt<T>): boolean {
+  return attempt.response.status === 401 || attempt.response.status === 403 || attempt.errors.some(isAuthError);
 }
 
 async function readBody<T>(response: Response): Promise<GraphqlBody<T> | null> {
@@ -43,25 +55,44 @@ async function readBody<T>(response: Response): Promise<GraphqlBody<T> | null> {
   }
 }
 
-export function createGraphqlClient(apiKey: string, fetchImpl: typeof fetch = fetch): GraphqlClient {
-  async function send<T>(query: string, variables: Record<string, unknown>): Promise<GraphqlResult<T>> {
+export function createGraphqlClient(auth: string | AuthProvider, fetchImpl: typeof fetch = fetch): GraphqlClient {
+  async function authorization(): Promise<string> {
+    if (typeof auth === "string") return auth;
+    const header = await auth.getHeader();
+    if (header === null) throw new LinearAuthError(SIGN_IN_EXPIRED_MESSAGE);
+    return header;
+  }
+
+  async function dispatch<T>(payload: string): Promise<Attempt<T>> {
+    const header = await authorization();
     let response: Response;
     try {
       response = await fetchImpl(ENDPOINT, {
         method: "POST",
-        headers: { Authorization: apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ query, variables }),
+        headers: { Authorization: header, "Content-Type": "application/json" },
+        body: payload,
       });
     } catch {
       throw new LinearError(NETWORK_MESSAGE);
     }
 
     const body = await readBody<T>(response);
-    const errors = body?.errors ?? [];
-    if (response.status === 401 || response.status === 403 || errors.some(isAuthError)) {
-      throw new LinearAuthError(AUTH_MESSAGE);
+    return { response, body, errors: body?.errors ?? [] };
+  }
+
+  async function send<T>(query: string, variables: Record<string, unknown>): Promise<GraphqlResult<T>> {
+    const payload = JSON.stringify({ query, variables });
+    let attempt = await dispatch<T>(payload);
+    if (typeof auth !== "string" && auth.refresh && isAuthFailure(attempt)) {
+      if (await auth.refresh()) {
+        attempt = await dispatch<T>(payload);
+      }
+    }
+    if (isAuthFailure(attempt)) {
+      throw new LinearAuthError(typeof auth === "string" ? AUTH_MESSAGE : SIGN_IN_EXPIRED_MESSAGE);
     }
 
+    const { response, body, errors } = attempt;
     const data = body?.data ?? null;
     if (!response.ok && data === null) {
       throw new LinearError(errors[0]?.message ?? `Linear request failed with HTTP ${response.status}.`);

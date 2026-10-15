@@ -1,20 +1,78 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ROOM_CODE_PATTERN } from "@shared/protocol";
-import { createLiveService } from "../../linear/live";
-import { keyStore } from "../../linear/keyStore";
-import { Chip, HeroCard, Icon, LabelValue, LogoMark, PillButton, RailNav, SectionCard, SidePanel, SideRow, TopBar } from "../../ui";
+import { takeOAuthError } from "../../linear/oauth";
+import {
+  Chip,
+  HeroCard,
+  Icon,
+  LabelValue,
+  LogoMark,
+  PillButton,
+  RailNav,
+  SectionCard,
+  SidePanel,
+  SideRow,
+  TopBar,
+  useToast,
+} from "../../ui";
 import { ConnectLinearModal } from "../ConnectLinearModal";
 import { createHostSecret, generateRoomCode, getName, markDemo, setName } from "../identity";
+import { LinearProvider, useLinear } from "../linearContext";
 import { navigate } from "../router";
 
+const PENDING_CREATE_KEY = "pp.pendingCreate";
+
+function readPendingCreate(): boolean {
+  try {
+    return sessionStorage.getItem(PENDING_CREATE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writePendingCreate(pending: boolean): void {
+  try {
+    if (pending) sessionStorage.setItem(PENDING_CREATE_KEY, "1");
+    else sessionStorage.removeItem(PENDING_CREATE_KEY);
+  } catch {
+    return;
+  }
+}
+
 export function Landing() {
+  return (
+    <LinearProvider demo={false}>
+      <LandingContent />
+    </LinearProvider>
+  );
+}
+
+function LandingContent() {
+  const { mode, authMethod, oauthAvailable, setKey, signOut } = useLinear();
+  const toast = useToast();
   const [name, setNameState] = useState(() => getName());
-  const [connected, setConnected] = useState(() => keyStore.get() !== null);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [pendingCreate, setPendingCreate] = useState(false);
+  const [pendingCreate, setPendingCreate] = useState(() => readPendingCreate() && mode !== "none");
+  const resumed = useRef(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const joinRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    writePendingCreate(false);
+  }, []);
+
+  useEffect(() => {
+    const message = takeOAuthError();
+    if (message) toast(message, "error");
+  }, [toast]);
+
+  useEffect(() => {
+    if (!pendingCreate || mode === "none" || resumed.current) return;
+    resumed.current = true;
+    setPendingCreate(false);
+    openRoom(false);
+  }, [pendingCreate, mode]);
 
   function openRoom(demo: boolean) {
     const code = generateRoomCode();
@@ -24,31 +82,29 @@ export function Landing() {
   }
 
   function handleCreate() {
-    if (keyStore.get() === null) {
+    if (mode === "none") {
       setPendingCreate(true);
+      if (oauthAvailable) writePendingCreate(true);
       setConnectOpen(true);
       return;
     }
     openRoom(false);
   }
 
-  function handleConnected() {
-    setConnectOpen(false);
-    setConnected(true);
-    if (pendingCreate) {
-      setPendingCreate(false);
-      openRoom(false);
-    }
+  function openConnect() {
+    setPendingCreate(false);
+    writePendingCreate(false);
+    setConnectOpen(true);
   }
 
   function closeConnect() {
     setConnectOpen(false);
     setPendingCreate(false);
+    writePendingCreate(false);
   }
 
-  async function connectWithKey(key: string) {
-    await createLiveService(key).getViewer();
-    keyStore.set(key);
+  function handleConnected() {
+    setConnectOpen(false);
   }
 
   function handleName(value: string) {
@@ -67,23 +123,19 @@ export function Landing() {
     navigate(`/r/${code}`);
   }
 
+  const connected = mode !== "none";
+  const statusLabel =
+    authMethod === "oauth" ? "Signed in with Linear" : authMethod === "key" ? "Personal API key" : "Not connected";
+
   return (
     <div className="pp-app">
       <RailNav
         items={[
           { id: "start", label: "Start", icon: "room", active: true, onClick: () => navigate("/") },
-          {
-            id: "linear",
-            label: "Linear",
-            icon: "link",
-            onClick: () => {
-              setPendingCreate(false);
-              setConnectOpen(true);
-            },
-          },
+          { id: "linear", label: "Linear", icon: "link", onClick: openConnect },
         ]}
       />
-      <SidePanel title="Start" footer="Your Linear key stays in this browser.">
+      <SidePanel title="Start" footer="Your Linear connection stays in this browser.">
         <SideRow active onClick={handleCreate}>
           <span className="pp-side-icon">
             <Icon name="plus" size={18} />
@@ -150,7 +202,7 @@ export function Landing() {
               <PillButton size="lg" icon="plus" onClick={handleCreate}>
                 Create room
               </PillButton>
-              <p className="pp-hero-note">Creating a room uses your personal Linear key, kept in this browser.</p>
+              <p className="pp-hero-note">Creating a room uses your Linear connection, kept in this browser.</p>
             </div>
             <form className="pp-hero-join" onSubmit={handleJoin}>
               <label className="pp-field">
@@ -187,20 +239,27 @@ export function Landing() {
             <LabelValue label="Step 3">Vote, reveal and accept an estimate</LabelValue>
           </div>
         </SectionCard>
-        <SectionCard title="Your Linear key" collapsible defaultOpen={false}>
+        <SectionCard title="Linear connection" collapsible defaultOpen={false}>
           <div className="pp-grid">
+            <LabelValue label="Status">{statusLabel}</LabelValue>
             <LabelValue label="Where it lives">This browser only</LabelValue>
             <LabelValue label="Our server">Never receives it</LabelValue>
-            <LabelValue label="Demo rooms">Need no key</LabelValue>
+            <LabelValue label="Demo rooms">Need no connection</LabelValue>
+          </div>
+          <div className="pp-hero-create">
+            {connected ? (
+              <PillButton variant="secondary" size="sm" onClick={signOut}>
+                Disconnect
+              </PillButton>
+            ) : (
+              <PillButton size="sm" icon="link" onClick={openConnect}>
+                Connect
+              </PillButton>
+            )}
           </div>
         </SectionCard>
       </main>
-      <ConnectLinearModal
-        open={connectOpen}
-        onClose={closeConnect}
-        connect={connectWithKey}
-        onConnected={handleConnected}
-      />
+      <ConnectLinearModal open={connectOpen} onClose={closeConnect} connect={setKey} onConnected={handleConnected} />
     </div>
   );
 }

@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Ticket } from "@shared/types";
-import { LinearError } from "./client";
-import { createLiveService } from "./live";
+import { LinearAuthError, LinearError } from "./client";
+import { createLiveService, createOAuthLiveService } from "./live";
+import { oauthTokenStore } from "./oauth";
 import type { IssueNode } from "./mapIssue";
 
 type Call = { query: string; variables: Record<string, unknown> };
@@ -323,5 +324,83 @@ describe("issuesByRefs", () => {
     await service.searchIssues("  webhook retry ");
 
     expect(mock.calls[0]?.variables).toEqual({ filter: { title: { containsIgnoreCase: "webhook retry" } } });
+  });
+});
+
+function memoryStorage(): Storage {
+  const data = new Map<string, string>();
+  return {
+    get length() {
+      return data.size;
+    },
+    clear: () => data.clear(),
+    getItem: (key: string) => data.get(key) ?? null,
+    key: (index: number) => [...data.keys()][index] ?? null,
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      data.set(key, value);
+    },
+  };
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+describe("createOAuthLiveService", () => {
+  const viewerBody = { data: { viewer: { id: "u1", name: "Tamas", email: "t@example.com" } } };
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_LINEAR_CLIENT_ID", "client-123");
+    vi.stubGlobal("localStorage", memoryStorage());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("sends the OAuth access token as a Bearer header", async () => {
+    oauthTokenStore.set({ accessToken: "at-1", refreshToken: "rt-1", expiresAt: Date.now() + 3_600_000 });
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => jsonResponse(viewerBody));
+
+    const viewer = await createOAuthLiveService(fetchMock as unknown as typeof fetch).getViewer();
+
+    expect(viewer).toEqual({ id: "u1", name: "Tamas", email: "t@example.com" });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer at-1");
+  });
+
+  it("refreshes the token and retries once when Linear rejects it", async () => {
+    oauthTokenStore.set({ accessToken: "at-1", refreshToken: "rt-1", expiresAt: Date.now() + 3_600_000 });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "https://api.linear.app/oauth/token") {
+        return jsonResponse({ access_token: "at-2", refresh_token: "rt-2", expires_in: 86399 });
+      }
+      const header = (init?.headers as Record<string, string>).Authorization;
+      return header === "Bearer at-2" ? jsonResponse(viewerBody) : jsonResponse({}, 401);
+    });
+
+    const viewer = await createOAuthLiveService(fetchMock as unknown as typeof fetch).getViewer();
+
+    expect(viewer.id).toBe("u1");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(oauthTokenStore.get()?.refreshToken).toBe("rt-2");
+  });
+
+  it("fails with a sign-in error and does not call Linear when no tokens are stored", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(viewerBody));
+
+    const error = await createOAuthLiveService(fetchMock as unknown as typeof fetch)
+      .getViewer()
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(LinearAuthError);
+    expect((error as LinearAuthError).message).toBe("Your Linear sign-in expired. Sign in again.");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

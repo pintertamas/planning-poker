@@ -1,6 +1,7 @@
 import type { Estimate, Ticket } from "@shared/types";
-import { createGraphqlClient, LinearError, type GraphqlClient } from "./client";
+import { createGraphqlClient, LinearError, type AuthProvider, type GraphqlClient } from "./client";
 import { ISSUE_FIELDS, mapIssue, type IssueNode } from "./mapIssue";
+import { getAccessToken } from "./oauth";
 import { parseRefs } from "./parseRefs";
 import type { IssuePage, LinearService, LinearTeam, LinearView, ScaleCheck, Viewer } from "./types";
 
@@ -142,8 +143,8 @@ async function fetchTeams(client: GraphqlClient): Promise<LinearTeam[]> {
   return nodes.map(toTeam);
 }
 
-export function createLiveService(apiKey: string, fetchImpl: typeof fetch = fetch): LinearService {
-  const client = createGraphqlClient(apiKey, fetchImpl);
+function buildLiveService(auth: string | AuthProvider, fetchImpl: typeof fetch): LinearService {
+  const client = createGraphqlClient(auth, fetchImpl);
   let teamsCache: Promise<LinearTeam[]> | null = null;
 
   function listTeams(): Promise<LinearTeam[]> {
@@ -284,4 +285,19 @@ export function createLiveService(apiKey: string, fetchImpl: typeof fetch = fetc
     checkEstimateScale,
     commitEstimate,
   };
+}
+
+export function createLiveService(apiKey: string, fetchImpl: typeof fetch = fetch): LinearService {
+  return buildLiveService(apiKey, fetchImpl);
+}
+
+export function createOAuthLiveService(fetchImpl: typeof fetch = fetch): LinearService {
+  const provider: AuthProvider = {
+    getHeader: async () => {
+      const token = await getAccessToken(fetchImpl);
+      return token ? `Bearer ${token}` : null;
+    },
+    refresh: async () => (await getAccessToken(fetchImpl, true)) !== null,
+  };
+  return buildLiveService(provider, fetchImpl);
 }
