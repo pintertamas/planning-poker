@@ -2,9 +2,9 @@ import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_PATTERN } from "@shared/protocol";
 import type { ServerErrorCode, ServerMessage } from "@shared/protocol";
 import { createRoom, nextAlarmAt, reduce, toPublicState } from "@shared/reducer";
-import { ROOM_TTL_MS } from "@shared/types";
-import type { ServerRoom } from "@shared/types";
+import type { RoomLimits, ServerRoom } from "@shared/types";
 import { sha256Hex, timingSafeEqualHex } from "./auth";
+import { limitsFromEnv, roomExpiry } from "./expiry";
 import type { Env } from "./env";
 import { ROOM_CODE_HEADER } from "./env";
 import { sanitizeAction } from "./sanitize";
@@ -56,6 +56,10 @@ export class RoomDO extends DurableObject<Env> {
   private room: ServerRoom | null = null;
   private lock: Promise<unknown> = Promise.resolve();
 
+  private get limits(): RoomLimits {
+    return limitsFromEnv(this.env);
+  }
+
   private exclusive<T>(task: () => Promise<T>): Promise<T> {
     const run = this.lock.then(task);
     this.lock = run.catch(() => undefined);
@@ -68,7 +72,6 @@ export class RoomDO extends DurableObject<Env> {
       if (code === null || !ROOM_CODE_PATTERN.test(code)) {
         return new Response("Invalid room", { status: 400 });
       }
-      await this.ensureRoom(code);
       const pair = new WebSocketPair();
       const client = pair[0];
       const server = pair[1];
@@ -99,12 +102,9 @@ export class RoomDO extends DurableObject<Env> {
       const room = await this.loadRoom();
       if (room === null) return;
       const now = Date.now();
-      if (now >= room.lastActivityAt + ROOM_TTL_MS) {
-        for (const socket of this.ctx.getWebSockets()) {
-          closeSocket(socket, 1001, "Room expired");
-        }
-        this.room = null;
-        await this.ctx.storage.deleteAll();
+      const limits = this.limits;
+      if (roomExpiry(room, this.joinedSockets().length, now, limits) !== null) {
+        await this.destroy();
         return;
       }
       const next = reduce(room, { type: "tick" }, { playerId: "", isHost: false }, now).room;
@@ -112,7 +112,7 @@ export class RoomDO extends DurableObject<Env> {
         await this.store(next);
         this.broadcast(next);
       }
-      await this.ctx.storage.setAlarm(nextAlarmAt(next));
+      await this.ctx.storage.setAlarm(nextAlarmAt(next, limits));
     });
   }
 
@@ -148,10 +148,15 @@ export class RoomDO extends DurableObject<Env> {
       this.sendError(ws, "bad_request", "Invalid host secret");
       return;
     }
-    const room = await this.loadRoom();
+    const now = Date.now();
+    let room = await this.loadRoom();
     if (room === null) {
-      this.rejectClosed(ws);
-      return;
+      const code = this.ctx.id.name;
+      if (typeof hostSecret !== "string" || code === undefined || !ROOM_CODE_PATTERN.test(code)) {
+        this.rejectClosed(ws);
+        return;
+      }
+      room = createRoom(code, now);
     }
 
     let isHost = false;
@@ -171,7 +176,6 @@ export class RoomDO extends DurableObject<Env> {
       }
     }
 
-    const now = Date.now();
     const result = reduce(room, { type: "join", playerId, name, asHost: isHost }, { playerId, isHost }, now);
     if (result.error !== undefined) {
       if (result.error === "name_taken") {
@@ -243,12 +247,17 @@ export class RoomDO extends DurableObject<Env> {
     this.broadcast(result.room);
   }
 
-  private async ensureRoom(code: string): Promise<ServerRoom> {
-    const existing = await this.loadRoom();
-    if (existing !== null) return existing;
-    const room = createRoom(code, Date.now());
-    await this.commit(room);
-    return room;
+  private joinedSockets(): WebSocket[] {
+    return this.ctx.getWebSockets().filter((socket) => readAttachment(socket) !== null);
+  }
+
+  private async destroy(): Promise<void> {
+    for (const socket of this.ctx.getWebSockets()) {
+      this.sendError(socket, "room_closed", "This session has ended.");
+      closeSocket(socket, 1001, "Room expired");
+    }
+    this.room = null;
+    await this.ctx.storage.deleteAll();
   }
 
   private async loadRoom(): Promise<ServerRoom | null> {
@@ -265,7 +274,7 @@ export class RoomDO extends DurableObject<Env> {
 
   private async commit(room: ServerRoom): Promise<void> {
     await this.store(room);
-    await this.ctx.storage.setAlarm(nextAlarmAt(room));
+    await this.ctx.storage.setAlarm(nextAlarmAt(room, this.limits));
   }
 
   private send(ws: WebSocket, message: ServerMessage): void {
@@ -277,7 +286,7 @@ export class RoomDO extends DurableObject<Env> {
   }
 
   private rejectClosed(ws: WebSocket): void {
-    this.sendError(ws, "room_closed", "Room no longer exists");
+    this.sendError(ws, "room_closed", "This session does not exist or has already ended.");
     closeSocket(ws, 1000, "Room closed");
   }
 

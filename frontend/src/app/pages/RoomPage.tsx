@@ -3,12 +3,14 @@ import { useRoomApi, type RoomApi } from "../../net/api";
 import { RoomProvider } from "../../net/RoomProvider";
 import { getHostSecret, getName, getPlayerId, isDemo } from "../identity";
 import { JoinScreen } from "./JoinScreen";
+import { SessionEndedScreen } from "./SessionEndedScreen";
 import { LinearProvider } from "../linearContext";
 import { RoomShell } from "../RoomShell";
 
 const NAME_TAKEN_MESSAGE = "That name is already taken in this room. Pick another one.";
+const SESSION_ENDED_MESSAGE = "This session has ended.";
 
-export type GateView = "joining" | "rejected" | "room";
+export type GateView = "joining" | "rejected" | "ended" | "room";
 
 export const JOIN_TIMEOUT_MS = 10000;
 
@@ -20,6 +22,7 @@ export function gateView({
   timedOut = false,
 }: Pick<RoomApi, "me" | "status" | "error" | "errorCode"> & { timedOut?: boolean }): GateView {
   if (errorCode === "name_taken") return "rejected";
+  if (errorCode === "room_closed") return "ended";
   if (timedOut) return "room";
   if (me === null && error === null && (status === "connecting" || status === "reconnecting")) return "joining";
   return "room";
@@ -52,6 +55,7 @@ function JoinGate({
   }, []);
 
   if (view === "rejected") return null;
+  if (view === "ended") return <SessionEndedScreen code={code} message={api.error ?? SESSION_ENDED_MESSAGE} />;
   if (view === "joining") return <JoinScreen code={code} joining initialName={name} error={joinError} onJoin={() => undefined} />;
   return <>{children}</>;
 }

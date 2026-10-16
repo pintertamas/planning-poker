@@ -38,4 +38,33 @@ describe("gateView", () => {
   it("still rejects a taken name after the timeout", () => {
     expect(gateView({ me: null, status: "closed", error: "taken", errorCode: "name_taken", timedOut: true })).toBe("rejected");
   });
+
+  it("shows the session-ended screen when a link points at a room that does not exist", () => {
+    expect(
+      gateView({
+        me: null,
+        status: "closed",
+        error: "This session does not exist or has already ended.",
+        errorCode: "room_closed",
+      }),
+    ).toBe("ended");
+  });
+
+  it("shows the session-ended screen when the room expires while the user is in it", () => {
+    expect(
+      gateView({ me, status: "closed", error: "This session has ended.", errorCode: "room_closed" }),
+    ).toBe("ended");
+  });
+
+  it("keeps the session-ended screen ahead of the timeout fallback", () => {
+    expect(
+      gateView({
+        me: null,
+        status: "closed",
+        error: "This session has ended.",
+        errorCode: "room_closed",
+        timedOut: true,
+      }),
+    ).toBe("ended");
+  });
 });

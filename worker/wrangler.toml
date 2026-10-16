@@ -12,3 +12,5 @@ new_sqlite_classes = ["RoomDO"]
 
 [vars]
 ALLOWED_ORIGINS = "https://pintertamas.github.io"
+IDLE_EMPTY_TTL_MS = "300000"
+MAX_ROOM_AGE_MS = "4200000"

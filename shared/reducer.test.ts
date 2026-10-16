@@ -2,16 +2,19 @@ import { describe, expect, it } from "vitest";
 import { createRoom, nextAlarmAt, reduce, toPublicState } from "./reducer";
 import {
   COFFEE,
+  DEFAULT_ROOM_LIMITS,
   DEFAULT_TIMER_SEC,
+  IDLE_EMPTY_TTL_MS,
   MAX_PLAYERS,
+  MAX_ROOM_AGE_MS,
   MAX_TICKETS,
-  ROOM_TTL_MS,
 } from "./types";
 import type {
   Actor,
   ClientAction,
   Estimate,
   ReduceResult,
+  RoomLimits,
   ServerAction,
   ServerRoom,
   Ticket,
@@ -922,23 +925,67 @@ describe("toPublicState", () => {
 });
 
 describe("nextAlarmAt", () => {
-  it("is the inactivity deadline when no round is running", () => {
-    const room = createRoom("abc123", T0);
-    expect(nextAlarmAt(room)).toBe(T0 + ROOM_TTL_MS);
+  const LIMITS: RoomLimits = { idleEmptyMs: 5_000, maxAgeMs: 70_000 };
+  const ROUND_END = T0 + DEFAULT_TIMER_SEC * 1000;
+
+  const disconnectAll = (room: ServerRoom): ServerRoom => ({
+    ...room,
+    players: room.players.map((player) => ({ ...player, connected: false })),
   });
 
-  it("is the round deadline when it comes before the inactivity deadline", () => {
-    const room = votingRoom(T0);
-    expect(nextAlarmAt(room)).toBe(T0 + DEFAULT_TIMER_SEC * 1000);
+  it("uses the idle deadline for an empty room", () => {
+    expect(nextAlarmAt(createRoom("abc123", T0), LIMITS)).toBe(T0 + LIMITS.idleEmptyMs);
   });
 
-  it("is the inactivity deadline when it comes before the round deadline", () => {
-    const room = { ...votingRoom(T0), lastActivityAt: T0 - ROOM_TTL_MS + 1000 };
-    expect(nextAlarmAt(room)).toBe(T0 + 1000);
+  it("uses the idle deadline from the last activity", () => {
+    const room = { ...createRoom("abc123", T0), lastActivityAt: T0 + 2_000 };
+    expect(nextAlarmAt(room, LIMITS)).toBe(T0 + 2_000 + LIMITS.idleEmptyMs);
+  });
+
+  it("ignores the idle deadline while someone is connected", () => {
+    expect(nextAlarmAt(lobby(), LIMITS)).toBe(T0 + LIMITS.maxAgeMs);
+  });
+
+  it("ignores the idle deadline when only one of several players is connected", () => {
+    const room = lobby();
+    const partly = {
+      ...room,
+      players: room.players.map((player, index) => ({ ...player, connected: index !== 0 })),
+    };
+    expect(nextAlarmAt(partly, LIMITS)).toBe(T0 + LIMITS.maxAgeMs);
+  });
+
+  it("uses the round deadline when it is earlier than the max age and someone is connected", () => {
+    expect(nextAlarmAt(votingRoom(T0), LIMITS)).toBe(ROUND_END);
+  });
+
+  it("uses the round deadline when it is earlier than the idle deadline and nobody is connected", () => {
+    const room = disconnectAll(votingRoom(T0));
+    expect(nextAlarmAt(room, { idleEmptyMs: 60_000, maxAgeMs: 70_000 })).toBe(ROUND_END);
+  });
+
+  it("uses the max age when it is earlier than the round deadline and someone is connected", () => {
+    expect(nextAlarmAt(votingRoom(T0), { idleEmptyMs: 5_000, maxAgeMs: 10_000 })).toBe(T0 + 10_000);
+  });
+
+  it("uses the max age when it is earlier than the idle deadline and nobody is connected", () => {
+    const room = disconnectAll(createRoom("abc123", T0));
+    expect(nextAlarmAt(room, { idleEmptyMs: 60_000, maxAgeMs: 10_000 })).toBe(T0 + 10_000);
+  });
+
+  it("uses the idle deadline when it is the earliest and nobody is connected", () => {
+    const room = disconnectAll(votingRoom(T0));
+    expect(nextAlarmAt(room, { idleEmptyMs: 1_000, maxAgeMs: 70_000 })).toBe(T0 + 1_000);
   });
 
   it("ignores the round deadline once the round is revealed", () => {
-    const room = act(votingRoom(T0), { type: "reveal" }, HOST, T0 + 1);
-    expect(nextAlarmAt(room)).toBe(T0 + 1 + ROOM_TTL_MS);
+    const room = disconnectAll(act(votingRoom(T0), { type: "reveal" }, HOST, T0 + 1));
+    expect(nextAlarmAt(room, LIMITS)).toBe(T0 + 1 + LIMITS.idleEmptyMs);
+  });
+
+  it("uses the default limits when none are given", () => {
+    expect(nextAlarmAt(createRoom("abc123", T0))).toBe(T0 + IDLE_EMPTY_TTL_MS);
+    expect(nextAlarmAt(lobby())).toBe(T0 + MAX_ROOM_AGE_MS);
+    expect(DEFAULT_ROOM_LIMITS).toEqual({ idleEmptyMs: IDLE_EMPTY_TTL_MS, maxAgeMs: MAX_ROOM_AGE_MS });
   });
 });

@@ -1,10 +1,10 @@
 import {
   ALLOWED_ESTIMATES,
   COFFEE,
+  DEFAULT_ROOM_LIMITS,
   DEFAULT_TIMER_SEC,
   MAX_PLAYERS,
   MAX_TICKETS,
-  ROOM_TTL_MS,
   TIMER_OPTIONS_SEC,
 } from "./types";
 import type {
@@ -13,6 +13,7 @@ import type {
   Estimate,
   Player,
   ReduceResult,
+  RoomLimits,
   RoomState,
   ServerAction,
   ServerRound,
@@ -399,10 +400,13 @@ export function toPublicState(room: ServerRoom, now: number): RoomState {
   };
 }
 
-export function nextAlarmAt(room: ServerRoom): number {
-  const inactiveAt = room.lastActivityAt + ROOM_TTL_MS;
+export function nextAlarmAt(room: ServerRoom, limits: RoomLimits = DEFAULT_ROOM_LIMITS): number {
+  const deadlines: number[] = [room.createdAt + limits.maxAgeMs];
   if (room.round.phase === "voting" && room.round.endsAt !== null) {
-    return Math.min(room.round.endsAt, inactiveAt);
+    deadlines.push(room.round.endsAt);
   }
-  return inactiveAt;
+  if (room.players.every((player) => !player.connected)) {
+    deadlines.push(room.lastActivityAt + limits.idleEmptyMs);
+  }
+  return Math.min(...deadlines);
 }
