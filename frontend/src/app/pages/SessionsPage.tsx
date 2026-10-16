@@ -110,7 +110,7 @@ function SessionsContent() {
           left={
             <span className="pp-brand">
               <LogoMark size={32} />
-              Pointing Poker
+              Planning Poker
             </span>
           }
         />

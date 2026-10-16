@@ -146,7 +146,7 @@ function LandingContent() {
           left={
             <span className="pp-brand">
               <LogoMark size={32} />
-              Pointing Poker
+              Planning Poker
             </span>
           }
           center={<span className="pp-muted">Planning poker for Linear tickets</span>}

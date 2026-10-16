@@ -27,7 +27,7 @@ export function SessionEndedScreen({ code, message }: SessionEndedScreenProps) {
           left={
             <span className="pp-brand">
               <LogoMark size={32} />
-              Pointing Poker
+              Planning Poker
             </span>
           }
           right={<Chip tone="outline">{label}</Chip>}

@@ -40,7 +40,7 @@ function RailButton({ item }: { item: RailItem }) {
 export function RailNav({ items, bottom }: { items: RailItem[]; bottom?: RailItem[] }) {
   return (
     <nav className="pp-rail" aria-label="Main">
-      <div className="pp-rail-logo" role="img" aria-label="Pointing Poker">
+      <div className="pp-rail-logo" role="img" aria-label="Planning Poker">
         <LogoMark />
       </div>
       <ul className="pp-rail-list">

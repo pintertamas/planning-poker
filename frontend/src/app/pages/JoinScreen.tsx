@@ -46,7 +46,7 @@ export function JoinScreen({ code, onJoin, initialName, error, joining = false }
           left={
             <span className="pp-brand">
               <LogoMark size={32} />
-              Pointing Poker
+              Planning Poker
             </span>
           }
           right={<Chip tone="outline">{label}</Chip>}
