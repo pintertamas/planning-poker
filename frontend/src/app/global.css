@@ -236,6 +236,7 @@ a {
   flex: 1 1 0;
   max-width: 220px;
   min-width: 0;
+  text-transform: uppercase;
 }
 
 @container (min-width: 588px) {

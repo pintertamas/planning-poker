@@ -206,7 +206,7 @@ function LandingContent() {
                   <input
                     className="pp-input pp-hero-code"
                     value={joinCode}
-                    placeholder="abc123"
+                    placeholder="ABC123"
                     maxLength={6}
                     autoComplete="off"
                     autoCapitalize="none"
