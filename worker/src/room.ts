@@ -14,6 +14,7 @@ const MAX_HOST_SECRET_CHARS = 128;
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
 const ROOM_KEY = "room";
 const HOST_HASH_KEY = "hostHash";
+const NAME_TAKEN_MESSAGE = "That name is already taken in this room.";
 
 type Attachment = { playerId: string; isHost: boolean };
 
@@ -173,8 +174,12 @@ export class RoomDO extends DurableObject<Env> {
     const now = Date.now();
     const result = reduce(room, { type: "join", playerId, name, asHost: isHost }, { playerId, isHost }, now);
     if (result.error !== undefined) {
-      const code: ServerErrorCode = result.error === "room_full" ? "room_full" : "bad_request";
-      this.sendError(ws, code, result.error);
+      if (result.error === "name_taken") {
+        this.sendError(ws, "name_taken", NAME_TAKEN_MESSAGE);
+      } else {
+        const code: ServerErrorCode = result.error === "room_full" ? "room_full" : "bad_request";
+        this.sendError(ws, code, result.error);
+      }
       closeSocket(ws, 1008, "Rejected");
       return;
     }

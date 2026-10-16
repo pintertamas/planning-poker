@@ -5,7 +5,12 @@ export type ClientMessage =
   | { t: "act"; action: ClientAction }
   | { t: "ping"; clientTime: number };
 
-export type ServerErrorCode = "forbidden" | "bad_request" | "room_full" | "room_closed";
+export type ServerErrorCode =
+  | "forbidden"
+  | "bad_request"
+  | "room_full"
+  | "room_closed"
+  | "name_taken";
 
 export type ServerMessage =
   | { t: "welcome"; playerId: string; isHost: boolean; state: RoomState }

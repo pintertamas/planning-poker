@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { ServerErrorCode } from "@shared/protocol";
 import type { ClientAction, RoomState } from "@shared/types";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "closed";
@@ -11,6 +12,7 @@ export type RoomApi = {
   me: Me | null;
   clockOffsetMs: number;
   error: string | null;
+  errorCode: ServerErrorCode | null;
   send: (action: ClientAction) => void;
 };
 

@@ -169,13 +169,75 @@ describe("join", () => {
     room = seat(room, "a", "   Alice   ");
     room = seat(room, "b", "x".repeat(40));
     room = seat(room, "c", "    ");
-    room = seat(room, "d", "");
     expect(room.players.map((p) => p.name)).toEqual([
       "Alice",
       "x".repeat(24),
       "Guest",
-      "Guest",
     ]);
+  });
+
+  it("rejects a second joiner whose name matches a connected player ignoring case and spacing", () => {
+    let room = seat(createRoom("abc123", T0), "a", "Mary  Jane");
+    const result = reduce(room, { type: "join", playerId: "b", name: "  mary JANE ", asHost: false }, as("b"), T0);
+    expect(result.error).toBe("name_taken");
+    expect(result.room).toBe(room);
+    room = result.room;
+    expect(room.players.map((p) => [p.id, p.name])).toEqual([["a", "Mary  Jane"]]);
+  });
+
+  it("allows a name once its holder has disconnected and removes that seat with its vote", () => {
+    let room = votingRoom();
+    room = act(room, { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "leave", playerId: "a" }, as("a"));
+    room = seat(room, "c", "alice", false, T0 + 5);
+    expect(room.players.map((p) => [p.id, p.name, p.connected])).toEqual([
+      ["h", "Host", true],
+      ["b", "Bob", true],
+      ["c", "alice", true],
+    ]);
+    expect(room.round.votes).toEqual({});
+  });
+
+  it("removes a disconnected seat's revealed value when its name is reclaimed", () => {
+    let room = votingRoom();
+    room = act(room, { type: "vote", value: 8 }, as("a"));
+    room = act(room, { type: "leave", playerId: "a" }, as("a"));
+    room = act(room, { type: "reveal" });
+    expect(room.round.revealed).toEqual({ h: COFFEE, a: 8, b: COFFEE });
+    room = seat(room, "c", "ALICE", false, T0 + 5);
+    expect(room.round.revealed).toEqual({ h: COFFEE, b: COFFEE });
+    expect(room.round.phase).toBe("revealed");
+  });
+
+  it("keeps the same player's seat when it rejoins with its own name", () => {
+    let room = lobby();
+    room = seat(room, "a", " alice ", false, T0 + 5);
+    expect(room.players.map((p) => [p.id, p.name, p.connected])).toEqual([
+      ["h", "Host", true],
+      ["a", "alice", true],
+      ["b", "Bob", true],
+    ]);
+    room = act(room, { type: "leave", playerId: "a" }, as("a"));
+    room = seat(room, "a", "Alice", false, T0 + 10);
+    expect(room.players.map((p) => p.id)).toEqual(["h", "a", "b"]);
+    expect(room.players[1]).toEqual({ id: "a", name: "Alice", connected: true, isHost: false });
+  });
+
+  it("keeps a disconnected host's name taken", () => {
+    let room = lobby();
+    room = act(room, { type: "leave", playerId: "h" }, as("h"));
+    const result = reduce(room, { type: "join", playerId: "c", name: "host", asHost: false }, as("c"), T0);
+    expect(result.error).toBe("name_taken");
+    expect(result.room).toBe(room);
+    expect(result.room.hostId).toBe("h");
+    expect(result.room.players.map((p) => p.id)).toEqual(["h", "a", "b"]);
+  });
+
+  it("rejects two empty names because both sanitize to Guest", () => {
+    let room = seat(createRoom("abc123", T0), "a", "");
+    const result = reduce(room, { type: "join", playerId: "b", name: "   ", asHost: false }, as("b"), T0);
+    expect(result.error).toBe("name_taken");
+    expect(result.room.players.map((p) => p.name)).toEqual(["Guest"]);
   });
 
   it("does not let the actor argument change the outcome", () => {
@@ -196,6 +258,41 @@ describe("rename", () => {
   it("falls back to Guest for an empty name", () => {
     const room = act(lobby(), { type: "rename", name: "   " }, as("a"));
     expect(room.players.find((p) => p.id === "a")?.name).toBe("Guest");
+  });
+
+  it("fails with name_taken when the new name belongs to a connected player", () => {
+    const room = lobby();
+    const result = reduce(room, { type: "rename", name: "  aLiCe " }, as("b"), T0);
+    expect(result.error).toBe("name_taken");
+    expect(result.room).toBe(room);
+  });
+
+  it("succeeds when renaming to a free name or to the player's own name in another case", () => {
+    let room = lobby();
+    room = act(room, { type: "rename", name: " BOB " }, as("b"));
+    expect(room.players.find((p) => p.id === "b")?.name).toBe("BOB");
+    room = act(room, { type: "rename", name: "Robert" }, as("b"));
+    expect(room.players.find((p) => p.id === "b")?.name).toBe("Robert");
+  });
+
+  it("reclaims a disconnected player's name and removes that seat", () => {
+    let room = votingRoom();
+    room = act(room, { type: "vote", value: 3 }, as("a"));
+    room = act(room, { type: "leave", playerId: "a" }, as("a"));
+    room = act(room, { type: "rename", name: "alice" }, as("b"));
+    expect(room.players.map((p) => [p.id, p.name])).toEqual([
+      ["h", "Host"],
+      ["b", "alice"],
+    ]);
+    expect(room.round.votes).toEqual({});
+  });
+
+  it("fails with name_taken when renaming onto a disconnected host", () => {
+    let room = lobby();
+    room = act(room, { type: "leave", playerId: "h" }, as("h"));
+    const result = reduce(room, { type: "rename", name: "HOST" }, as("b"), T0);
+    expect(result.error).toBe("name_taken");
+    expect(result.room.players.map((p) => p.id)).toEqual(["h", "a", "b"]);
   });
 
   it("returns not_found for an unknown actor", () => {

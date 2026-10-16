@@ -12,7 +12,14 @@ type RoomProviderProps = {
   children: ReactNode;
 };
 
-const INITIAL: Snapshot = { status: "connecting", state: null, me: null, clockOffsetMs: 0, error: null };
+const INITIAL: Snapshot = {
+  status: "connecting",
+  state: null,
+  me: null,
+  clockOffsetMs: 0,
+  error: null,
+  errorCode: null,
+};
 
 export function RoomProvider({ code, playerId, name, hostSecret, children }: RoomProviderProps) {
   const [snap, setSnap] = useState<Snapshot>(INITIAL);

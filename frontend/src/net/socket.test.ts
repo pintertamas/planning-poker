@@ -185,6 +185,28 @@ describe("RoomSocket", () => {
     expect(latest()).toMatchObject({ status: "closed", error: "Room is full" });
   });
 
+  it("name_taken is fatal: no reconnect, closed status with the code and message", () => {
+    create().connect();
+    fake().open();
+    fake().receive({ t: "error", code: "name_taken", message: "That name is already taken in this room." });
+    fake().drop();
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWebSocket.instances.length).toBe(1);
+    expect(latest()).toMatchObject({
+      status: "closed",
+      error: "That name is already taken in this room.",
+      errorCode: "name_taken",
+    });
+  });
+
+  it("exposes the code of a non-fatal error and clears it on welcome", () => {
+    connectAndWelcome();
+    fake().receive({ t: "error", code: "bad_request", message: "Bad move" });
+    expect(latest()).toMatchObject({ status: "open", error: "Bad move", errorCode: "bad_request" });
+    fake().receive({ t: "welcome", playerId: "p1", isHost: true, state: STATE });
+    expect(latest()).toMatchObject({ status: "open", error: null, errorCode: null });
+  });
+
   it("close() sets the closed status and does not reconnect", () => {
     const sock = connectAndWelcome();
     sock.close();

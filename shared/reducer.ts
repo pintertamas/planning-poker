@@ -54,6 +54,31 @@ const sanitizeName = (raw: string): string => {
   return Array.from(trimmed).slice(0, NAME_MAX_LENGTH).join("").trimEnd();
 };
 
+const nameKey = (sanitized: string): string => sanitized.replace(/\s+/g, " ").toLowerCase();
+
+const omitSeats = <V>(record: Record<string, V>, playerIds: ReadonlySet<string>): Record<string, V> =>
+  Object.fromEntries(Object.entries(record).filter(([id]) => !playerIds.has(id)));
+
+const removeSeats = (room: ServerRoom, playerIds: ReadonlySet<string>): ServerRoom => ({
+  ...room,
+  players: room.players.filter((player) => !playerIds.has(player.id)),
+  round: {
+    ...room.round,
+    votes: omitSeats(room.round.votes, playerIds),
+    revealed: room.round.revealed === null ? null : omitSeats(room.round.revealed, playerIds),
+  },
+});
+
+const claimName = (room: ServerRoom, playerId: string, sanitized: string): ServerRoom | null => {
+  const key = nameKey(sanitized);
+  const holders = room.players.filter(
+    (player) => player.id !== playerId && nameKey(player.name) === key,
+  );
+  if (holders.some((player) => player.connected || player.id === room.hostId)) return null;
+  if (holders.length === 0) return room;
+  return removeSeats(room, new Set(holders.map((player) => player.id)));
+};
+
 const voteOf = (votes: Record<string, Estimate>, playerId: string): Estimate | undefined =>
   Object.prototype.hasOwnProperty.call(votes, playerId) ? votes[playerId] : undefined;
 
@@ -112,14 +137,16 @@ const join = (room: ServerRoom, playerId: string, name: string, asHost: boolean)
   const cleanName = sanitizeName(name);
   const exists = hasPlayer(room, playerId);
   if (!exists && room.players.length >= MAX_PLAYERS) return fail("room_full");
-  const hostId = asHost ? playerId : room.hostId;
+  const claimed = claimName(room, playerId, cleanName);
+  if (claimed === null) return fail("name_taken");
+  const hostId = asHost ? playerId : claimed.hostId;
   const players: Player[] = exists
-    ? room.players.map((player) =>
+    ? claimed.players.map((player) =>
         player.id === playerId ? { ...player, name: cleanName, connected: true } : player,
       )
-    : [...room.players, { id: playerId, name: cleanName, connected: true, isHost: false }];
+    : [...claimed.players, { id: playerId, name: cleanName, connected: true, isHost: false }];
   return ok({
-    ...room,
+    ...claimed,
     hostId,
     players: players.map((player) => ({ ...player, isHost: player.id === hostId })),
   });
@@ -142,9 +169,11 @@ const tick = (room: ServerRoom, now: number): Outcome => {
 const rename = (room: ServerRoom, playerId: string, name: string): Outcome => {
   if (!hasPlayer(room, playerId)) return fail("not_found");
   const cleanName = sanitizeName(name);
+  const claimed = claimName(room, playerId, cleanName);
+  if (claimed === null) return fail("name_taken");
   return ok({
-    ...room,
-    players: room.players.map((player) =>
+    ...claimed,
+    players: claimed.players.map((player) =>
       player.id === playerId ? { ...player, name: cleanName } : player,
     ),
   });

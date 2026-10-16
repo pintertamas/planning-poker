@@ -3,10 +3,19 @@ import { Chip, HeroCard, LogoMark, PillButton, RailNav, SidePanel, SideRow, TopB
 import { getName, setName } from "../identity";
 import { navigate } from "../router";
 
-export function JoinScreen({ code, onJoin }: { code: string; onJoin: (name: string) => void }) {
-  const [draft, setDraft] = useState(() => getName());
+type JoinScreenProps = {
+  code: string;
+  onJoin: (name: string) => void;
+  initialName?: string;
+  error?: string;
+};
+
+export function JoinScreen({ code, onJoin, initialName, error }: JoinScreenProps) {
+  const [draft, setDraft] = useState(() => initialName ?? getName());
+  const [errorDismissed, setErrorDismissed] = useState(false);
   const label = `ROOM ${code.toUpperCase()}`;
   const trimmed = draft.trim();
+  const shownError = errorDismissed ? undefined : error;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,9 +71,19 @@ export function JoinScreen({ code, onJoin }: { code: string; onJoin: (name: stri
                 maxLength={24}
                 autoComplete="name"
                 autoFocus
-                onChange={(event) => setDraft(event.target.value)}
+                aria-invalid={shownError ? true : undefined}
+                aria-describedby={shownError ? "join-name-error" : undefined}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setErrorDismissed(true);
+                }}
               />
             </label>
+            {shownError && (
+              <p id="join-name-error" role="alert" className="pp-error">
+                {shownError}
+              </p>
+            )}
             <div className="pp-join-actions">
               <PillButton type="submit" size="lg" disabled={trimmed === ""}>
                 Join room

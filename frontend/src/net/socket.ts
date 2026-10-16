@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from "@shared/protocol";
+import type { ClientMessage, ServerErrorCode, ServerMessage } from "@shared/protocol";
 import type { ClientAction, RoomState } from "@shared/types";
 import type { ConnectionStatus, Me } from "./api";
 
@@ -13,6 +13,7 @@ export type Snapshot = {
   me: Me | null;
   clockOffsetMs: number;
   error: string | null;
+  errorCode: ServerErrorCode | null;
 };
 
 export type RoomSocketOptions = {
@@ -31,7 +32,7 @@ const PING_INTERVAL_MS = 10_000;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 8_000;
 const JITTER_RATIO = 0.25;
-const FATAL_CODES: ReadonlySet<string> = new Set(["forbidden", "room_full", "room_closed"]);
+const FATAL_CODES: ReadonlySet<string> = new Set(["forbidden", "room_full", "room_closed", "name_taken"]);
 
 export class RoomSocket {
   private readonly url: string;
@@ -42,7 +43,14 @@ export class RoomSocket {
   private readonly now: () => number;
   private readonly random: () => number;
   private name: string;
-  private snap: Snapshot = { status: "connecting", state: null, me: null, clockOffsetMs: 0, error: null };
+  private snap: Snapshot = {
+    status: "connecting",
+    state: null,
+    me: null,
+    clockOffsetMs: 0,
+    error: null,
+    errorCode: null,
+  };
   private ws: WebSocketLike | null = null;
   private attempt = 0;
   private bestRttMs = Number.POSITIVE_INFINITY;
@@ -122,6 +130,7 @@ export class RoomSocket {
           state: msg.state,
           me: { playerId: msg.playerId, name: this.nameIn(msg.state), isHost: msg.isHost },
           error: null,
+          errorCode: null,
         });
         this.startPing();
         return;
@@ -137,9 +146,9 @@ export class RoomSocket {
         return;
       case "error":
         if (FATAL_CODES.has(msg.code)) {
-          this.fail(msg.message);
+          this.fail(msg.code, msg.message);
         } else {
-          this.setSnap({ error: msg.message });
+          this.setSnap({ error: msg.message, errorCode: msg.code });
         }
         return;
     }
@@ -185,13 +194,13 @@ export class RoomSocket {
     }, delay);
   }
 
-  private fail(message: string): void {
+  private fail(code: ServerErrorCode, message: string): void {
     this.fatal = true;
     const ws = this.ws;
     this.ws = null;
     this.stopTimers();
     ws?.close();
-    this.setSnap({ status: "closed", error: message });
+    this.setSnap({ status: "closed", error: message, errorCode: code });
   }
 
   private startPing(): void {
