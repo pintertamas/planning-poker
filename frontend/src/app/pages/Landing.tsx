@@ -118,6 +118,9 @@ function LandingContent() {
     <div className="pp-app">
       <RailNav
         items={[{ id: "start", label: "Start", icon: "room", active: true, onClick: () => navigate("/") }]}
+        bottom={
+          connected ? [{ id: "signout", label: "Sign out", icon: "signout", onClick: signOut }] : undefined
+        }
       />
       <SidePanel title="How it works">
         <SideRow>
@@ -142,7 +145,6 @@ function LandingContent() {
             </span>
           }
           center={<span className="pp-muted">Planning poker for Linear tickets</span>}
-          right={connected ? <Chip tone="outline">Signed in with Linear</Chip> : undefined}
         />
         <HeroCard
           chips={
@@ -167,7 +169,7 @@ function LandingContent() {
             Pick tickets from Linear, vote 1, 2, 3, 5 or 8, and the estimate goes back to the ticket.
           </p>
           <div className="pp-hero-form">
-            <label className="pp-field">
+            <label className="pp-field pp-hero-name">
               <span className="pp-field-label">Your name</span>
               <input
                 className="pp-input"
@@ -177,50 +179,53 @@ function LandingContent() {
                 onChange={(event) => handleName(event.target.value)}
               />
             </label>
-            <div className="pp-hero-create">
-              <PillButton size="lg" icon="plus" onClick={handleCreate} disabled={!oauthAvailable && mode === "none"}>
-                Create room
-              </PillButton>
-              <p className="pp-hero-note">
-                Creating a room means signing in with Linear first. Your teammates only need the link.
-              </p>
-              {!oauthAvailable && mode === "none" && (
-                <p className="pp-hero-note pp-muted">Linear sign-in is not set up yet. You can still try the demo.</p>
-              )}
-              {connected && (
-                <p className="pp-hero-note pp-muted">
-                  Signed in with Linear.{" "}
-                  <button type="button" className="pp-signout" onClick={signOut}>
-                    Sign out
-                  </button>
-                </p>
-              )}
-            </div>
-            <form className="pp-hero-join" onSubmit={handleJoin}>
-              <label className="pp-field">
+            <div className="pp-hero-grid">
+              <div className="pp-hero-block">
+                <span className="pp-field-label">Start a session</span>
+                <PillButton size="lg" icon="plus" onClick={handleCreate} disabled={!oauthAvailable && mode === "none"}>
+                  Create room
+                </PillButton>
+                {connected && (
+                  <p className="pp-hero-status pp-hero-status--ok">
+                    <Icon name="check" size={16} />
+                    Signed in with Linear
+                  </p>
+                )}
+                {!connected && oauthAvailable && (
+                  <p className="pp-hero-status pp-muted">
+                    You will sign in with Linear first. Your teammates only need the link.
+                  </p>
+                )}
+                {!connected && !oauthAvailable && (
+                  <p className="pp-hero-status pp-muted">Linear sign-in is not set up yet. You can still try the demo.</p>
+                )}
+              </div>
+              <div className="pp-hero-block pp-hero-block--join">
                 <span className="pp-field-label">Join with a code</span>
-                <input
-                  className="pp-input"
-                  value={joinCode}
-                  placeholder="abc123"
-                  maxLength={6}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  aria-label="Room code"
-                  aria-invalid={joinError !== null}
-                  onChange={(event) => setJoinCode(event.target.value)}
-                />
-              </label>
-              <PillButton type="submit" variant="ghost" size="lg" icon="arrow-right">
-                Join
-              </PillButton>
-            </form>
-            {joinError && (
-              <p role="alert" className="pp-error">
-                {joinError}
-              </p>
-            )}
+                <form className="pp-hero-join" onSubmit={handleJoin}>
+                  <input
+                    className="pp-input pp-hero-code"
+                    value={joinCode}
+                    placeholder="abc123"
+                    maxLength={6}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-label="Room code"
+                    aria-invalid={joinError !== null}
+                    onChange={(event) => setJoinCode(event.target.value)}
+                  />
+                  <PillButton type="submit" variant="ghost" size="lg" icon="arrow-right">
+                    Join
+                  </PillButton>
+                </form>
+                {joinError && (
+                  <p role="alert" className="pp-error">
+                    {joinError}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </HeroCard>
       </main>
