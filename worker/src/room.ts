@@ -2,8 +2,10 @@ import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_PATTERN } from "@shared/protocol";
 import type { ServerErrorCode, ServerMessage } from "@shared/protocol";
 import { createRoom, nextAlarmAt, reduce, toPublicState } from "@shared/reducer";
-import type { RoomLimits, ServerRoom } from "@shared/types";
+import { sameSummary, summarizeRoom } from "@shared/sessions";
+import type { RoomLimits, ServerRoom, SessionSummary } from "@shared/types";
 import { sha256Hex, timingSafeEqualHex } from "./auth";
+import { directoryStub } from "./directory";
 import { limitsFromEnv, roomExpiry } from "./expiry";
 import type { Env } from "./env";
 import { ROOM_CODE_HEADER } from "./env";
@@ -55,6 +57,7 @@ const closeSocket = (socket: WebSocket, code: number, reason: string): void => {
 export class RoomDO extends DurableObject<Env> {
   private room: ServerRoom | null = null;
   private lock: Promise<unknown> = Promise.resolve();
+  private lastPushed: SessionSummary | null = null;
 
   private get limits(): RoomLimits {
     return limitsFromEnv(this.env);
@@ -104,6 +107,7 @@ export class RoomDO extends DurableObject<Env> {
       const now = Date.now();
       const limits = this.limits;
       if (roomExpiry(room, this.joinedSockets().length, now, limits) !== null) {
+        await this.removeFromDirectory(room.code);
         await this.destroy();
         return;
       }
@@ -111,6 +115,7 @@ export class RoomDO extends DurableObject<Env> {
       if (next !== room) {
         await this.store(next);
         this.broadcast(next);
+        await this.publishSummary(next);
       }
       await this.ctx.storage.setAlarm(nextAlarmAt(next, limits));
     });
@@ -195,6 +200,7 @@ export class RoomDO extends DurableObject<Env> {
     await this.commit(result.room);
     this.send(ws, { t: "welcome", playerId, isHost, state: toPublicState(result.room, now) });
     this.broadcast(result.room, ws);
+    await this.publishSummary(result.room);
   }
 
   private async handleAct(ws: WebSocket, data: Record<string, unknown>): Promise<void> {
@@ -220,6 +226,7 @@ export class RoomDO extends DurableObject<Env> {
     }
     await this.commit(result.room);
     this.broadcast(result.room);
+    await this.publishSummary(result.room);
   }
 
   private handlePing(ws: WebSocket, data: Record<string, unknown>): void {
@@ -245,6 +252,7 @@ export class RoomDO extends DurableObject<Env> {
     if (result.error !== undefined) return;
     await this.commit(result.room);
     this.broadcast(result.room);
+    await this.publishSummary(result.room);
   }
 
   private joinedSockets(): WebSocket[] {
@@ -258,6 +266,25 @@ export class RoomDO extends DurableObject<Env> {
     }
     this.room = null;
     await this.ctx.storage.deleteAll();
+  }
+
+  private async publishSummary(room: ServerRoom): Promise<void> {
+    const summary = summarizeRoom(room);
+    if (this.lastPushed !== null && sameSummary(this.lastPushed, summary)) return;
+    try {
+      await directoryStub(this.env).upsert(summary);
+      this.lastPushed = summary;
+    } catch {
+      return;
+    }
+  }
+
+  private async removeFromDirectory(code: string): Promise<void> {
+    try {
+      await directoryStub(this.env).remove(code);
+    } catch {
+      return;
+    }
   }
 
   private async loadRoom(): Promise<ServerRoom | null> {

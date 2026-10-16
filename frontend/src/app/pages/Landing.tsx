@@ -46,7 +46,7 @@ export function Landing() {
 }
 
 function LandingContent() {
-  const { mode, oauthAvailable, signOut } = useLinear();
+  const { mode, authMethod, oauthAvailable, signOut } = useLinear();
   const toast = useToast();
   const [name, setNameState] = useState(() => getName());
   const [connectOpen, setConnectOpen] = useState(false);
@@ -117,7 +117,12 @@ function LandingContent() {
   return (
     <div className="pp-app">
       <RailNav
-        items={[{ id: "start", label: "Start", icon: "room", active: true, onClick: () => navigate("/") }]}
+        items={[
+          { id: "start", label: "Start", icon: "room", active: true, onClick: () => navigate("/") },
+          ...(authMethod === "oauth"
+            ? [{ id: "sessions", label: "Sessions", icon: "users" as const, onClick: () => navigate("/sessions") }]
+            : []),
+        ]}
         bottom={
           connected ? [{ id: "signout", label: "Sign out", icon: "signout", onClick: signOut }] : undefined
         }

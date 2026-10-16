@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { PillButton, RailNav, SectionCard, ToastProvider } from "../ui";
 import { Landing } from "./pages/Landing";
 import { RoomPage } from "./pages/RoomPage";
+import { SessionsPage } from "./pages/SessionsPage";
 import { navigate, useRoute } from "./router";
 
 function NotFound() {
@@ -27,6 +28,8 @@ export function App() {
     screen = <RoomPage key={route.code} code={route.code} />;
   } else if (route.name === "landing") {
     screen = <Landing />;
+  } else if (route.name === "sessions") {
+    screen = <SessionsPage />;
   } else {
     screen = <NotFound />;
   }

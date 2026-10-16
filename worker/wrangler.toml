@@ -6,11 +6,20 @@ compatibility_date = "2026-10-01"
 name = "ROOMS"
 class_name = "RoomDO"
 
+[[durable_objects.bindings]]
+name = "DIRECTORY"
+class_name = "Directory"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RoomDO"]
 
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Directory"]
+
 [vars]
 ALLOWED_ORIGINS = "https://pintertamas.github.io"
+ALLOWED_LINEAR_ORG_KEY = "marshmallow"
 IDLE_EMPTY_TTL_MS = "300000"
 MAX_ROOM_AGE_MS = "4200000"

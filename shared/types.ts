@@ -126,3 +126,16 @@ export type Summary = {
   suggested: Estimate | null;
   consensus: boolean;
 };
+
+export type SessionSummary = {
+  code: string;
+  hostName: string;
+  players: number;
+  ticketsTotal: number;
+  ticketsGroomed: number;
+  phase: RoundPhase;
+  createdAt: number;
+  lastActivityAt: number;
+};
+
+export type SessionsResponse = { sessions: SessionSummary[] };

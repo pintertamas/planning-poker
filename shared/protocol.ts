@@ -22,3 +22,5 @@ export const WS_PATH_PREFIX = "/ws/";
 export const ROOM_CODE_PATTERN = /^[a-z0-9]{6}$/;
 export const ALLOWED_ORIGINS = ["https://pintertamas.github.io"];
 export const LOCAL_ORIGIN_PATTERN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+export const SESSIONS_PATH = "/api/sessions";

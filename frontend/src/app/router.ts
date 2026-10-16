@@ -1,11 +1,12 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { ROOM_CODE_PATTERN } from "@shared/protocol";
 
-export type Route = { name: "landing" } | { name: "room"; code: string } | { name: "notfound" };
+export type Route = { name: "landing" } | { name: "room"; code: string } | { name: "sessions" } | { name: "notfound" };
 
 export function parseRoute(hash: string): Route {
   const path = (hash.startsWith("#") ? hash.slice(1) : hash).replace(/\/+$/, "");
   if (path === "") return { name: "landing" };
+  if (path === "/sessions") return { name: "sessions" };
   const match = /^\/r\/([^/]+)$/.exec(path);
   const code = match?.[1]?.toLowerCase();
   if (code !== undefined && ROOM_CODE_PATTERN.test(code)) return { name: "room", code };

@@ -23,7 +23,8 @@ export function ConnectLinearModal({ open, onClose }: { open: boolean; onClose: 
       <div className="pp-form">
         <p>
           Rooms are created with your Linear account, so your company login (SSO) applies and the app reads and updates
-          tickets as you. Your sign-in stays in this browser and is never sent to our server, and teammates who join do
+          tickets as you. Your sign-in stays in this browser and is only shared with our server, briefly and without
+          storing it, to confirm you belong to the company workspace when you open Live sessions. Teammates who join do
           not need to sign in.
         </p>
         {oauthAvailable ? (
