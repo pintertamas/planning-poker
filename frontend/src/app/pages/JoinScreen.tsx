@@ -13,10 +13,9 @@ type JoinScreenProps = {
 
 export function JoinScreen({ code, onJoin, initialName, error, joining = false }: JoinScreenProps) {
   const [draft, setDraft] = useState(() => initialName ?? getName());
-  const [errorDismissed, setErrorDismissed] = useState(false);
   const label = `ROOM ${code.toUpperCase()}`;
   const trimmed = draft.trim();
-  const shownError = errorDismissed ? undefined : error;
+  const shownError = error;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,10 +74,7 @@ export function JoinScreen({ code, onJoin, initialName, error, joining = false }
                 readOnly={joining}
                 aria-invalid={shownError ? true : undefined}
                 aria-describedby={shownError ? "join-name-error" : undefined}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  setErrorDismissed(true);
-                }}
+                onChange={(event) => setDraft(event.target.value)}
               />
             </label>
             {shownError && (

@@ -28,11 +28,13 @@ export function gateView({
 function JoinGate({
   code,
   name,
+  joinError,
   onNameTaken,
   children,
 }: {
   code: string;
   name: string;
+  joinError?: string;
   onNameTaken: (name: string) => void;
   children: ReactNode;
 }) {
@@ -50,7 +52,7 @@ function JoinGate({
   }, []);
 
   if (view === "rejected") return null;
-  if (view === "joining") return <JoinScreen code={code} joining initialName={name} onJoin={() => undefined} />;
+  if (view === "joining") return <JoinScreen code={code} joining initialName={name} error={joinError} onJoin={() => undefined} />;
   return <>{children}</>;
 }
 
@@ -60,9 +62,13 @@ export function RoomPage({ code }: { code: string }) {
   const [hostSecret] = useState(() => getHostSecret(code) ?? undefined);
   const [demo] = useState(() => isDemo(code));
   const [rejection, setRejection] = useState<{ rejectedName: string } | null>(null);
+  const [joinError, setJoinError] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
 
-  const rejectName = useCallback((rejectedName: string) => setRejection({ rejectedName }), []);
+  const rejectName = useCallback((rejectedName: string) => {
+    setJoinError(NAME_TAKEN_MESSAGE);
+    setRejection({ rejectedName });
+  }, []);
 
   function join(next: string) {
     setName(next);
@@ -83,7 +89,7 @@ export function RoomPage({ code }: { code: string }) {
   return (
     <LinearProvider demo={demo}>
       <RoomProvider key={attempt} code={code} playerId={playerId} name={name} hostSecret={hostSecret}>
-        <JoinGate code={code} name={name} onNameTaken={rejectName}>
+        <JoinGate code={code} name={name} joinError={joinError} onNameTaken={rejectName}>
           <RoomShell />
         </JoinGate>
       </RoomProvider>
