@@ -142,7 +142,9 @@ export function TicketStage() {
           <span>{`Write-back is disabled: ${blockedReason}`}</span>
         </div>
       )}
-      <HeroCard chips={chips} title={ticket.title} actions={actions} />
+      <HeroCard chips={chips} title={ticket.title}>
+        <div className="pp-hero-actions tk-stage-actions">{actions}</div>
+      </HeroCard>
       <SectionCard title="Description">{renderMarkdown(ticket.description)}</SectionCard>
       <SectionCard title="Details">
         <div className="pp-grid">

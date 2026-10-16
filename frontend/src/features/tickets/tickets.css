@@ -663,3 +663,7 @@
     animation: none;
   }
 }
+
+.tk-stage-actions {
+  margin-left: 0;
+}
