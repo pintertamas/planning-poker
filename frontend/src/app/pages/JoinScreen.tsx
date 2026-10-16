@@ -8,9 +8,10 @@ type JoinScreenProps = {
   onJoin: (name: string) => void;
   initialName?: string;
   error?: string;
+  joining?: boolean;
 };
 
-export function JoinScreen({ code, onJoin, initialName, error }: JoinScreenProps) {
+export function JoinScreen({ code, onJoin, initialName, error, joining = false }: JoinScreenProps) {
   const [draft, setDraft] = useState(() => initialName ?? getName());
   const [errorDismissed, setErrorDismissed] = useState(false);
   const label = `ROOM ${code.toUpperCase()}`;
@@ -19,7 +20,7 @@ export function JoinScreen({ code, onJoin, initialName, error }: JoinScreenProps
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (trimmed === "") return;
+    if (joining || trimmed === "") return;
     setName(trimmed);
     onJoin(trimmed);
   }
@@ -71,6 +72,7 @@ export function JoinScreen({ code, onJoin, initialName, error }: JoinScreenProps
                 maxLength={24}
                 autoComplete="name"
                 autoFocus
+                readOnly={joining}
                 aria-invalid={shownError ? true : undefined}
                 aria-describedby={shownError ? "join-name-error" : undefined}
                 onChange={(event) => {
@@ -85,8 +87,9 @@ export function JoinScreen({ code, onJoin, initialName, error }: JoinScreenProps
               </p>
             )}
             <div className="pp-join-actions">
-              <PillButton type="submit" size="lg" disabled={trimmed === ""}>
-                Join room
+              <PillButton type="submit" size="lg" disabled={joining || trimmed === ""}>
+                {joining && <span className="pp-spinner" aria-hidden="true" />}
+                {joining ? "Joining..." : "Join room"}
               </PillButton>
               <PillButton variant="ghost" onClick={() => navigate("/")}>
                 Back to start

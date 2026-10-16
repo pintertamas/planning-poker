@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useRoomApi } from "../../net/api";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useRoomApi, type RoomApi } from "../../net/api";
 import { RoomProvider } from "../../net/RoomProvider";
 import { getHostSecret, getName, getPlayerId, isDemo } from "../identity";
 import { JoinScreen } from "./JoinScreen";
@@ -8,14 +8,50 @@ import { RoomShell } from "../RoomShell";
 
 const NAME_TAKEN_MESSAGE = "That name is already taken in this room. Pick another one.";
 
-function NameTakenWatcher({ name, onNameTaken }: { name: string; onNameTaken: (name: string) => void }) {
-  const { errorCode } = useRoomApi();
+export type GateView = "joining" | "rejected" | "room";
+
+export const JOIN_TIMEOUT_MS = 10000;
+
+export function gateView({
+  me,
+  status,
+  error,
+  errorCode,
+  timedOut = false,
+}: Pick<RoomApi, "me" | "status" | "error" | "errorCode"> & { timedOut?: boolean }): GateView {
+  if (errorCode === "name_taken") return "rejected";
+  if (timedOut) return "room";
+  if (me === null && error === null && (status === "connecting" || status === "reconnecting")) return "joining";
+  return "room";
+}
+
+function JoinGate({
+  code,
+  name,
+  onNameTaken,
+  children,
+}: {
+  code: string;
+  name: string;
+  onNameTaken: (name: string) => void;
+  children: ReactNode;
+}) {
+  const api = useRoomApi();
+  const [timedOut, setTimedOut] = useState(false);
+  const view = gateView({ ...api, timedOut });
 
   useEffect(() => {
-    if (errorCode === "name_taken") onNameTaken(name);
-  }, [errorCode, name, onNameTaken]);
+    if (view === "rejected") onNameTaken(name);
+  }, [view, name, onNameTaken]);
 
-  return null;
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTimedOut(true), JOIN_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (view === "rejected") return null;
+  if (view === "joining") return <JoinScreen code={code} joining initialName={name} onJoin={() => undefined} />;
+  return <>{children}</>;
 }
 
 export function RoomPage({ code }: { code: string }) {
@@ -47,8 +83,9 @@ export function RoomPage({ code }: { code: string }) {
   return (
     <LinearProvider demo={demo}>
       <RoomProvider key={attempt} code={code} playerId={playerId} name={name} hostSecret={hostSecret}>
-        <NameTakenWatcher name={name} onNameTaken={rejectName} />
-        <RoomShell />
+        <JoinGate code={code} name={name} onNameTaken={rejectName}>
+          <RoomShell />
+        </JoinGate>
       </RoomProvider>
     </LinearProvider>
   );
