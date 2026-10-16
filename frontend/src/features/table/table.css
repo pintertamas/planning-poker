@@ -394,8 +394,6 @@
 }
 
 .pp-bars {
-  --bar-min: 8px;
-  --bar-max: 150px;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: end;
@@ -419,9 +417,12 @@
 .pp-bar-track {
   width: 100%;
   max-width: 72px;
-  height: var(--bar-max);
+  height: 150px;
   display: flex;
   align-items: flex-end;
+  border-radius: 14px;
+  background: var(--cream);
+  overflow: hidden;
 }
 
 .pp-bar-fill {
@@ -431,10 +432,6 @@
   background: var(--ink);
   transform-origin: bottom;
   transition: height var(--dur-slow) var(--ease-out);
-}
-
-.pp-bar-fill.is-empty {
-  background: var(--sand);
 }
 
 .pp-bar-fill.is-peak {
