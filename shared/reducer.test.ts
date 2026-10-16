@@ -97,7 +97,7 @@ describe("createRoom", () => {
         votes: {},
         revealed: null,
       },
-      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: false },
+      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
     });
   });
 });
@@ -383,13 +383,24 @@ describe("vote", () => {
     });
   });
 
-  it("does not auto-reveal with the default settings once everyone has voted", () => {
+  it("auto-reveals with the default settings once everyone has voted", () => {
     let room = act(votingRoom(), { type: "vote", value: 3 }, as("a"));
     room = act(room, { type: "vote", value: 8 }, HOST);
-    room = act(room, { type: "vote", value: 5 }, as("b"), T0 + 2000);
-    expect(room.settings.autoRevealWhenAllVoted).toBe(false);
     expect(room.round.phase).toBe("voting");
-    expect(room.round.revealed).toBeNull();
+    room = act(room, { type: "vote", value: 5 }, as("b"), T0 + 2000);
+    expect(room.settings.autoRevealWhenAllVoted).toBe(true);
+    expect(room.round.phase).toBe("revealed");
+    expect(room.round.revealed).toEqual({ h: 8, a: 3, b: 5 });
+  });
+
+  it("lets a player change their vote until the last connected player has voted", () => {
+    let room = act(votingRoom(), { type: "vote", value: 3 }, as("a"));
+    room = act(room, { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "vote", value: 2 }, HOST);
+    room = act(room, { type: "vote", value: 8 }, HOST);
+    expect(room.round.phase).toBe("voting");
+    room = act(room, { type: "vote", value: 1 }, as("b"), T0 + 2000);
+    expect(room.round.revealed).toEqual({ h: 8, a: 5, b: 1 });
   });
 
   it("auto-reveals once every connected player has voted when the setting is on", () => {
@@ -441,8 +452,16 @@ describe("leave", () => {
     expect(room.round.revealed).toEqual({ h: 5, a: 3 });
   });
 
-  it("does not reveal when a straggler leaves under the default settings", () => {
+  it("reveals when a straggler leaves under the default settings", () => {
     let room = act(votingRoom(), { type: "vote", value: 3 }, as("a"));
+    room = act(room, { type: "vote", value: 5 }, HOST);
+    room = act(room, { type: "leave", playerId: "b" }, as("b"), T0 + 3000);
+    expect(room.round.phase).toBe("revealed");
+  });
+
+  it("does not reveal when a straggler leaves and auto-reveal is off", () => {
+    let room = act(votingRoom(), { type: "updateSettings", autoRevealWhenAllVoted: false });
+    room = act(room, { type: "vote", value: 3 }, as("a"));
     room = act(room, { type: "vote", value: 5 }, HOST);
     room = act(room, { type: "leave", playerId: "b" }, as("b"), T0 + 3000);
     expect(room.round.phase).toBe("voting");
@@ -875,7 +894,7 @@ describe("toPublicState", () => {
       tickets: room.tickets,
       currentTicketId: "t1",
       round: { phase: "idle", durationSec: DEFAULT_TIMER_SEC, endsAt: null, voted: { h: false, a: false, b: false }, votes: null },
-      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: false },
+      settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
       serverNow: T0 + 42,
     });
     expect(pub.players).not.toBe(room.players);
