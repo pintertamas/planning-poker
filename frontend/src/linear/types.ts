@@ -16,6 +16,8 @@ export type LinearView = {
   description: string | null;
   shared: boolean;
   teamKey: string | null;
+  favorite: boolean;
+  favoriteOrder: number | null;
 };
 
 export type IssuePage = { tickets: Ticket[]; nextCursor: string | null };

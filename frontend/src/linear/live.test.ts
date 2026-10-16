@@ -515,6 +515,173 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+function viewNode(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `View ${id}`,
+    description: null,
+    shared: false,
+    modelName: "Issue",
+    team: { key: "CLFP" },
+    ...overrides,
+  };
+}
+
+const VIEW_PAGE = {
+  nodes: [
+    viewNode("v1", { name: "Alpha", shared: true }),
+    viewNode("v2", { name: "Beta" }),
+    viewNode("v3", { name: "Gamma", shared: true, team: null }),
+    viewNode("v4", { name: "Project view", modelName: "Project" }),
+  ],
+  pageInfo: { hasNextPage: false, endCursor: null },
+};
+
+function favoritesPage(nodes: unknown[], hasNextPage = false, endCursor: string | null = null) {
+  return { data: { favorites: { nodes, pageInfo: { hasNextPage, endCursor } } } };
+}
+
+describe("listViews", () => {
+  it("sends the favourites query alongside customViews and marks favourite views with their order", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ data: { customViews: VIEW_PAGE } }),
+      Favorites: () =>
+        favoritesPage([
+          { id: "f1", sortOrder: 2, customView: { id: "v1" } },
+          { id: "f2", sortOrder: 1.5, customView: { id: "v3" } },
+          { id: "f3", sortOrder: 0, customView: null },
+        ]),
+    });
+    const service = signedInService(mock.fetch);
+
+    const views = await service.listViews();
+
+    expect(callsTo(mock.calls, "CustomViews")).toHaveLength(1);
+    expect(callsTo(mock.calls, "Favorites")).toHaveLength(1);
+    expect(callsTo(mock.calls, "Favorites")[0]?.variables).toEqual({ after: null });
+    expect(callsTo(mock.calls, "Favorites")[0]?.query).toContain("customView { id }");
+    expect(views).toEqual([
+      {
+        id: "v1",
+        name: "Alpha",
+        description: null,
+        shared: true,
+        teamKey: "CLFP",
+        favorite: true,
+        favoriteOrder: 2,
+      },
+      {
+        id: "v2",
+        name: "Beta",
+        description: null,
+        shared: false,
+        teamKey: "CLFP",
+        favorite: false,
+        favoriteOrder: null,
+      },
+      {
+        id: "v3",
+        name: "Gamma",
+        description: null,
+        shared: true,
+        teamKey: null,
+        favorite: true,
+        favoriteOrder: 1.5,
+      },
+    ]);
+  });
+
+  it("ignores favourites that are not saved views", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ data: { customViews: VIEW_PAGE } }),
+      Favorites: () =>
+        favoritesPage([
+          { id: "f1", sortOrder: 1, customView: null },
+          { id: "f2", sortOrder: 2, customView: null },
+          { id: "f3", sortOrder: 3, customView: { id: "v4" } },
+        ]),
+    });
+    const service = signedInService(mock.fetch);
+
+    const views = await service.listViews();
+
+    expect(views.map((view) => view.id)).toEqual(["v1", "v2", "v3"]);
+    expect(views.every((view) => !view.favorite && view.favoriteOrder === null)).toBe(true);
+  });
+
+  it("flattens favourites nested in folders by reading the flat favourites list", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ data: { customViews: VIEW_PAGE } }),
+      Favorites: () =>
+        favoritesPage([
+          { id: "folder", sortOrder: 0, customView: null },
+          { id: "nested", sortOrder: 4, customView: { id: "v2" } },
+        ]),
+    });
+    const service = signedInService(mock.fetch);
+
+    const views = await service.listViews();
+
+    expect(views.find((view) => view.id === "v2")).toMatchObject({ favorite: true, favoriteOrder: 4 });
+    expect(views.filter((view) => view.favorite)).toHaveLength(1);
+  });
+
+  it("follows favourite pages and stops after five pages", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ data: { customViews: VIEW_PAGE } }),
+      Favorites: ({ variables }) => {
+        const page = variables.after === null ? 0 : Number(String(variables.after).slice(1));
+        return favoritesPage([{ id: `f${page}`, sortOrder: page, customView: { id: "v1" } }], true, `c${page + 1}`);
+      },
+    });
+    const service = signedInService(mock.fetch);
+
+    const views = await service.listViews();
+
+    const favoriteCalls = callsTo(mock.calls, "Favorites");
+    expect(favoriteCalls).toHaveLength(5);
+    expect(favoriteCalls[0]?.variables.after).toBeNull();
+    expect(favoriteCalls[4]?.variables.after).toBe("c4");
+    expect(favoriteCalls[0]?.query).toContain("first: 100");
+    expect(views.find((view) => view.id === "v1")).toMatchObject({ favorite: true, favoriteOrder: 0 });
+  });
+
+  it("lists the views without favourites when the favourites request fails", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ data: { customViews: VIEW_PAGE } }),
+      Favorites: () => ({ errors: [{ message: "Complexity too high" }] }),
+    });
+    const service = signedInService(mock.fetch);
+
+    const views = await service.listViews();
+
+    expect(views.map((view) => view.id)).toEqual(["v1", "v2", "v3"]);
+    expect(views.every((view) => !view.favorite && view.favoriteOrder === null)).toBe(true);
+  });
+
+  it("propagates an auth error from the favourites request", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ data: { customViews: VIEW_PAGE } }),
+      Favorites: () => ({
+        errors: [{ message: "Authentication required", extensions: { type: "authentication error" } }],
+      }),
+    });
+    const service = signedInService(mock.fetch);
+
+    await expect(service.listViews()).rejects.toBeInstanceOf(LinearAuthError);
+  });
+
+  it("fails when the views request fails", async () => {
+    const mock = routedFetch({
+      CustomViews: () => ({ errors: [{ message: "Views unavailable" }] }),
+      Favorites: () => favoritesPage([{ id: "f1", sortOrder: 1, customView: { id: "v1" } }]),
+    });
+    const service = signedInService(mock.fetch);
+
+    await expect(service.listViews()).rejects.toBeInstanceOf(LinearError);
+  });
+});
+
 describe("createOAuthLiveService", () => {
   const viewerBody = { data: { viewer: { id: "u1", name: "Tamas", email: "t@example.com" } } };
 

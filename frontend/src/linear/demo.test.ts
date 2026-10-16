@@ -22,6 +22,22 @@ describe("demo service", () => {
     expect(total).toBe(12);
   });
 
+  it("offers shared and personal sample views with two favourites in sidebar order", async () => {
+    const views = await createDemoService().listViews();
+
+    const favorites = views
+      .filter((view) => view.favorite)
+      .sort((a, b) => (a.favoriteOrder ?? 0) - (b.favoriteOrder ?? 0));
+    expect(favorites.map((view) => [view.name, view.favoriteOrder])).toEqual([
+      ["Sprint backlog", 1],
+      ["Ready for grooming", 2],
+    ]);
+    expect(views.filter((view) => !view.favorite).every((view) => view.favoriteOrder === null)).toBe(true);
+    expect(views.some((view) => view.shared)).toBe(true);
+    expect(views.some((view) => !view.shared)).toBe(true);
+    expect(new Set(views.map((view) => view.id)).size).toBe(views.length);
+  });
+
   it("resolves known refs and reports unknown ones", async () => {
     const service = createDemoService();
     const result = await service.issuesByRefs(["DEMO-103", "DEMO-999"]);

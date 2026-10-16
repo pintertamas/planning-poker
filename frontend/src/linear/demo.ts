@@ -22,6 +22,8 @@ const DEMO_VIEWS: LinearView[] = [
     description: "Todo tickets without an estimate",
     shared: true,
     teamKey: "DEMO",
+    favorite: true,
+    favoriteOrder: 2,
   },
   {
     id: "demo-view-sprint",
@@ -29,6 +31,26 @@ const DEMO_VIEWS: LinearView[] = [
     description: "Everything queued for the next sprint",
     shared: true,
     teamKey: "DEMO",
+    favorite: true,
+    favoriteOrder: 1,
+  },
+  {
+    id: "demo-view-bugs",
+    name: "Bugs to triage",
+    description: "Bug reports waiting for a first look",
+    shared: true,
+    teamKey: "DEMO",
+    favorite: false,
+    favoriteOrder: null,
+  },
+  {
+    id: "demo-view-tech-debt",
+    name: "Tech debt",
+    description: "Cleanup we keep pushing back",
+    shared: false,
+    teamKey: "DEMO",
+    favorite: false,
+    favoriteOrder: null,
   },
 ];
 

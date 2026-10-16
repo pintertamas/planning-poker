@@ -15,11 +15,7 @@ export function RoomShell() {
   return (
     <div className="pp-app">
       <RailNav
-        items={[
-          { id: "room", label: "Room", icon: "room", active: true, onClick: () => undefined },
-          { id: "tickets", label: "Tickets", icon: "tickets", onClick: () => undefined },
-          { id: "settings", label: "Settings", icon: "settings", onClick: () => undefined },
-        ]}
+        items={[{ id: "room", label: "Room", icon: "room", active: true, onClick: () => undefined }]}
         bottom={[{ id: "leave", label: "Leave", icon: "signout", onClick: () => navigate("/") }]}
       />
       <SidePanel title="Tickets">

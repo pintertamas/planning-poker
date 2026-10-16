@@ -483,6 +483,65 @@
   opacity: 0.8;
 }
 
+.tk-view-star {
+  margin-right: 6px;
+  color: var(--amber);
+}
+
+.tk-search-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tk-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tk-search-icon {
+  position: absolute;
+  left: 16px;
+  display: flex;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+.tk-search-input {
+  padding-left: 42px;
+  padding-right: 46px;
+}
+
+.tk-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.tk-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--cream);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease;
+}
+
+.tk-search-clear:hover {
+  background: var(--cream-deep);
+}
+
+.tk-search-clear:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 1px;
+}
+
 .tk-picker {
   min-width: 0;
   display: flex;

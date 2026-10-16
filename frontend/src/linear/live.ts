@@ -35,6 +35,14 @@ type ViewNode = {
   team: { key: string } | null;
 };
 
+type FavoriteNode = {
+  id: string;
+  sortOrder: number;
+  customView: { id: string } | null;
+};
+
+const FAVORITE_PAGE_LIMIT = 5;
+
 const VIEWER_QUERY = `
   query Viewer {
     viewer { id name email }
@@ -62,6 +70,15 @@ const VIEWS_QUERY = `
   query CustomViews($after: String) {
     customViews(first: 50, after: $after) {
       nodes { id name description shared modelName team { key } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+const FAVORITES_QUERY = `
+  query Favorites($after: String) {
+    favorites(first: 100, after: $after) {
+      nodes { id sortOrder customView { id } }
       pageInfo { hasNextPage endCursor }
     }
   }
@@ -136,15 +153,34 @@ function refsQuery(count: number): string {
   return `query IssuesByRef(${variables}) {\n${aliases}\n}`;
 }
 
-async function collectAll<T>(fetchPage: (after: string | null) => Promise<Connection<T>>): Promise<T[]> {
+async function collectAll<T>(
+  fetchPage: (after: string | null) => Promise<Connection<T>>,
+  maxPages = Number.POSITIVE_INFINITY,
+): Promise<T[]> {
   const all: T[] = [];
   let after: string | null = null;
+  let pages = 0;
   do {
     const page: Connection<T> = await fetchPage(after);
     all.push(...page.nodes);
-    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    pages += 1;
+    after = page.pageInfo.hasNextPage && pages < maxPages ? page.pageInfo.endCursor : null;
   } while (after !== null);
   return all;
+}
+
+async function fetchFavoriteOrders(client: GraphqlClient): Promise<Map<string, number>> {
+  const nodes = await collectAll<FavoriteNode>(async (after) => {
+    const data = await client.query<{ favorites: Connection<FavoriteNode> }>(FAVORITES_QUERY, { after });
+    return data.favorites;
+  }, FAVORITE_PAGE_LIMIT);
+  const orders = new Map<string, number>();
+  for (const node of nodes) {
+    if (node.customView && !orders.has(node.customView.id)) {
+      orders.set(node.customView.id, node.sortOrder);
+    }
+  }
+  return orders;
 }
 
 function toPage(connection: Connection<IssueNode>): IssuePage {
@@ -199,20 +235,37 @@ function buildLiveService(auth: AuthProvider, fetchImpl: typeof fetch): LinearSe
     return { id: data.viewer.id, name: data.viewer.name, email: data.viewer.email };
   }
 
+  async function favoriteOrdersOrNone(): Promise<Map<string, number>> {
+    try {
+      return await fetchFavoriteOrders(client);
+    } catch (error: unknown) {
+      if (error instanceof LinearAuthError) throw error;
+      return new Map();
+    }
+  }
+
   async function listViews(): Promise<LinearView[]> {
-    const views = await collectAll<ViewNode>(async (after) => {
-      const data = await client.query<{ customViews: Connection<ViewNode> }>(VIEWS_QUERY, { after });
-      return data.customViews;
-    });
+    const [views, favoriteOrders] = await Promise.all([
+      collectAll<ViewNode>(async (after) => {
+        const data = await client.query<{ customViews: Connection<ViewNode> }>(VIEWS_QUERY, { after });
+        return data.customViews;
+      }),
+      favoriteOrdersOrNone(),
+    ]);
     return views
       .filter((view) => view.modelName === "Issue")
-      .map((view) => ({
-        id: view.id,
-        name: view.name,
-        description: view.description,
-        shared: view.shared,
-        teamKey: view.team?.key ?? null,
-      }));
+      .map((view) => {
+        const favoriteOrder = favoriteOrders.get(view.id) ?? null;
+        return {
+          id: view.id,
+          name: view.name,
+          description: view.description,
+          shared: view.shared,
+          teamKey: view.team?.key ?? null,
+          favorite: favoriteOrder !== null,
+          favoriteOrder,
+        };
+      });
   }
 
   async function issuesFromView(viewId: string, cursor?: string): Promise<IssuePage> {

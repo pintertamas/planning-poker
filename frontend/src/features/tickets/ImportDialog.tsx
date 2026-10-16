@@ -7,6 +7,7 @@ import type { LinearService, LinearTeam, LinearView, ScaleCheck } from "../../li
 import { Chip, Icon, Modal, PillButton, useToast } from "../../ui";
 import { cx } from "../../ui/cx";
 import { appendUnique, errorMessage, trimDescription } from "./ticketHelpers";
+import { arrangeViews } from "./viewList";
 
 type Tab = "views" | "team" | "paste" | "search";
 type Listing = { gen: number; tickets: Ticket[]; nextCursor: string | null };
@@ -213,7 +214,10 @@ function ViewGroup({
               onClick={() => onPick(view)}
             >
               <span className="tk-view-head">
-                <span className="tk-view-name">{view.name}</span>
+                <span className="tk-view-name">
+                  {view.favorite && <span className="tk-view-star" aria-hidden="true">★</span>}
+                  {view.name}
+                </span>
                 {view.teamKey && <Chip tone="outline">{view.teamKey}</Chip>}
               </span>
               {view.description && <span className="tk-view-desc">{view.description}</span>}
@@ -231,12 +235,30 @@ function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
   const [views, setViews] = useState<LinearView[] | null>(null);
   const [selected, setSelected] = useState<LinearView | null>(null);
   const [current, setCurrent] = useState<Listing | null>(null);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const { run: loadViews } = viewsRequest;
   const { run: loadIssues } = listing;
+
+  const hasViews = (views?.length ?? 0) > 0;
+  const searching = query.trim() !== "";
+  const total = views?.length ?? 0;
 
   useEffect(() => {
     loadViews(() => service.listViews(), setViews);
   }, [service, loadViews]);
+
+  useEffect(() => {
+    if (!hasViews) return;
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [hasViews]);
+
+  const arranged = useMemo(
+    () => arrangeViews(views ?? [], query, selected?.id ?? null),
+    [views, query, selected],
+  );
+  const visibleCount = arranged.favorites.length + arranged.shared.length + arranged.personal.length;
 
   function open(view: LinearView) {
     setSelected(view);
@@ -261,9 +283,6 @@ function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
     );
   }
 
-  const shared = views?.filter((view) => view.shared) ?? [];
-  const personal = views?.filter((view) => !view.shared) ?? [];
-
   return (
     <div className="tk-tab">
       {viewsRequest.busy && <Spinner label="Loading views" />}
@@ -271,8 +290,54 @@ function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
       {views && views.length === 0 && (
         <p className="pp-muted">No saved Linear views yet. Create one in Linear, or use another tab.</p>
       )}
-      <ViewGroup title="Shared" views={shared} selectedId={selected?.id ?? null} onPick={open} />
-      <ViewGroup title="Personal" views={personal} selectedId={selected?.id ?? null} onPick={open} />
+      {hasViews && (
+        <div className="tk-search-block">
+          <div className="tk-search">
+            <span className="tk-search-icon" aria-hidden="true">
+              <Icon name="search" size={16} />
+            </span>
+            <input
+              ref={searchRef}
+              className="pp-input tk-search-input"
+              type="search"
+              aria-label="Search views"
+              placeholder="Search views by name, description or team"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || query === "") return;
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery("");
+              }}
+            />
+            {searching && (
+              <button
+                type="button"
+                className="tk-search-clear"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery("");
+                  searchRef.current?.focus();
+                }}
+              >
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </div>
+          <p className="tk-count" aria-live="polite">
+            {searching ? `${visibleCount} of ${plural(total, "view")}` : plural(visibleCount, "view")}
+          </p>
+          {!searching && <p className="pp-muted">Showing your favourites and personal views. Search to find shared views.</p>}
+        </div>
+      )}
+      {hasViews && visibleCount === 0 && searching && <p className="pp-muted">{`No views match "${query.trim()}".`}</p>}
+      {hasViews && visibleCount === 0 && !searching && (
+        <p className="pp-muted">You have no personal views yet. Search to find shared ones.</p>
+      )}
+      <ViewGroup title="Favourites" views={arranged.favorites} selectedId={selected?.id ?? null} onPick={open} />
+      <ViewGroup title="Shared" views={arranged.shared} selectedId={selected?.id ?? null} onPick={open} />
+      <ViewGroup title="Personal" views={arranged.personal} selectedId={selected?.id ?? null} onPick={open} />
       {listing.error && <Alert tone="error">{listing.error}</Alert>}
       {selected && listing.busy && !current && <Spinner label="Loading tickets" />}
       {selected && current && (
