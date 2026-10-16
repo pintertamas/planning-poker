@@ -4,8 +4,8 @@ export type Estimate = (typeof ALLOWED_ESTIMATES)[number];
 export const COFFEE = "coffee" as const;
 export type CardValue = Estimate | typeof COFFEE;
 
-export const TIMER_OPTIONS_SEC = [30, 60, 90, 120] as const;
-export const DEFAULT_TIMER_SEC = 60;
+export const TIMER_OPTIONS_SEC = [15, 30, 60] as const;
+export const DEFAULT_TIMER_SEC = 30;
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_TICKETS = 200;
 export const MAX_PLAYERS = 30;

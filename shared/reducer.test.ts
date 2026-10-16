@@ -313,7 +313,7 @@ describe("host-only actions", () => {
     { type: "revote" },
     { type: "accept", estimate: 3 },
     { type: "setSync", ticketId: "t1", sync: "synced" },
-    { type: "updateSettings", durationSec: 90 },
+    { type: "updateSettings", durationSec: 60 },
   ];
 
   it.each(hostOnly)("returns forbidden for a non-host sending $type", (action) => {
@@ -552,10 +552,10 @@ describe("startRound", () => {
   });
 
   it("uses the configured duration", () => {
-    let room = act(withTickets(lobby(), ["t1"]), { type: "updateSettings", durationSec: 120 });
+    let room = act(withTickets(lobby(), ["t1"]), { type: "updateSettings", durationSec: 60 });
     room = act(room, { type: "startRound" }, HOST, T0);
-    expect(room.round.durationSec).toBe(120);
-    expect(room.round.endsAt).toBe(T0 + 120_000);
+    expect(room.round.durationSec).toBe(60);
+    expect(room.round.endsAt).toBe(T0 + 60_000);
   });
 
   it("returns bad_state without a current ticket", () => {
@@ -794,8 +794,8 @@ describe("setSync", () => {
 
 describe("updateSettings", () => {
   it("applies every field provided", () => {
-    const room = act(lobby(), { type: "updateSettings", durationSec: 90, autoRevealWhenAllVoted: false });
-    expect(room.settings).toEqual({ durationSec: 90, autoRevealWhenAllVoted: false });
+    const room = act(lobby(), { type: "updateSettings", durationSec: 60, autoRevealWhenAllVoted: false });
+    expect(room.settings).toEqual({ durationSec: 60, autoRevealWhenAllVoted: false });
   });
 
   it("applies only the fields provided", () => {
