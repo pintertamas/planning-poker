@@ -24,14 +24,17 @@ export function DistributionBars({
         const count = counts[value];
         const isPeak = count > 0 && count === peak;
         const style = {
-          height: `${(count / peak) * 100}%`,
+          height: `calc(var(--bar-min) + ${count / peak} * (var(--bar-max) - var(--bar-min)))`,
           "--bar-delay": `${growing ? barDelayMs(index) : 0}ms`,
         } as CSSProperties;
         return (
           <div key={value} className="pp-bar" role="listitem">
             <span className="pp-bar-count">{count}</span>
             <div className="pp-bar-track">
-              <div className={cx("pp-bar-fill", isPeak && "is-peak", growing && "is-growing")} style={style} />
+              <div
+                className={cx("pp-bar-fill", isPeak && "is-peak", count === 0 && "is-empty", growing && "is-growing")}
+                style={style}
+              />
             </div>
             <span className="pp-bar-value">{value}</span>
             <div className="pp-bar-voters">
