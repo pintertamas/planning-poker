@@ -172,7 +172,7 @@ function LandingContent() {
               <input
                 className="pp-input"
                 value={name}
-                placeholder="Ada Lovelace"
+                placeholder="First name is fine"
                 autoComplete="name"
                 onChange={(event) => handleName(event.target.value)}
               />
