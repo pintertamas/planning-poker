@@ -4,6 +4,8 @@ import {
   COFFEE,
   DEFAULT_ROOM_LIMITS,
   DEFAULT_TIMER_SEC,
+  HEARTBEAT_CHECK_MS,
+  HEARTBEAT_TIMEOUT_MS,
   IDLE_EMPTY_TTL_MS,
   MAX_PLAYERS,
   MAX_ROOM_AGE_MS,
@@ -925,7 +927,8 @@ describe("toPublicState", () => {
 });
 
 describe("nextAlarmAt", () => {
-  const LIMITS: RoomLimits = { idleEmptyMs: 5_000, maxAgeMs: 70_000 };
+  const HEARTBEAT = { heartbeatTimeoutMs: 120_000, heartbeatCheckMs: 60_000 };
+  const LIMITS: RoomLimits = { idleEmptyMs: 5_000, maxAgeMs: 70_000, ...HEARTBEAT };
   const ROUND_END = T0 + DEFAULT_TIMER_SEC * 1000;
 
   const disconnectAll = (room: ServerRoom): ServerRoom => ({
@@ -961,21 +964,23 @@ describe("nextAlarmAt", () => {
 
   it("uses the round deadline when it is earlier than the idle deadline and nobody is connected", () => {
     const room = disconnectAll(votingRoom(T0));
-    expect(nextAlarmAt(room, { idleEmptyMs: 60_000, maxAgeMs: 70_000 })).toBe(ROUND_END);
+    expect(nextAlarmAt(room, { idleEmptyMs: 60_000, maxAgeMs: 70_000, ...HEARTBEAT })).toBe(ROUND_END);
   });
 
   it("uses the max age when it is earlier than the round deadline and someone is connected", () => {
-    expect(nextAlarmAt(votingRoom(T0), { idleEmptyMs: 5_000, maxAgeMs: 10_000 })).toBe(T0 + 10_000);
+    expect(
+      nextAlarmAt(votingRoom(T0), { idleEmptyMs: 5_000, maxAgeMs: 10_000, ...HEARTBEAT }),
+    ).toBe(T0 + 10_000);
   });
 
   it("uses the max age when it is earlier than the idle deadline and nobody is connected", () => {
     const room = disconnectAll(createRoom("abc123", T0));
-    expect(nextAlarmAt(room, { idleEmptyMs: 60_000, maxAgeMs: 10_000 })).toBe(T0 + 10_000);
+    expect(nextAlarmAt(room, { idleEmptyMs: 60_000, maxAgeMs: 10_000, ...HEARTBEAT })).toBe(T0 + 10_000);
   });
 
   it("uses the idle deadline when it is the earliest and nobody is connected", () => {
     const room = disconnectAll(votingRoom(T0));
-    expect(nextAlarmAt(room, { idleEmptyMs: 1_000, maxAgeMs: 70_000 })).toBe(T0 + 1_000);
+    expect(nextAlarmAt(room, { idleEmptyMs: 1_000, maxAgeMs: 70_000, ...HEARTBEAT })).toBe(T0 + 1_000);
   });
 
   it("ignores the round deadline once the round is revealed", () => {
@@ -986,6 +991,11 @@ describe("nextAlarmAt", () => {
   it("uses the default limits when none are given", () => {
     expect(nextAlarmAt(createRoom("abc123", T0))).toBe(T0 + IDLE_EMPTY_TTL_MS);
     expect(nextAlarmAt(lobby())).toBe(T0 + MAX_ROOM_AGE_MS);
-    expect(DEFAULT_ROOM_LIMITS).toEqual({ idleEmptyMs: IDLE_EMPTY_TTL_MS, maxAgeMs: MAX_ROOM_AGE_MS });
+    expect(DEFAULT_ROOM_LIMITS).toEqual({
+      idleEmptyMs: IDLE_EMPTY_TTL_MS,
+      maxAgeMs: MAX_ROOM_AGE_MS,
+      heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+      heartbeatCheckMs: HEARTBEAT_CHECK_MS,
+    });
   });
 });

@@ -8,14 +8,23 @@ export const TIMER_OPTIONS_SEC = [15, 30, 60] as const;
 export const DEFAULT_TIMER_SEC = 30;
 export const IDLE_EMPTY_TTL_MS = 5 * 60 * 1000;
 export const MAX_ROOM_AGE_MS = 70 * 60 * 1000;
+export const HEARTBEAT_TIMEOUT_MS = 2 * 60 * 1000;
+export const HEARTBEAT_CHECK_MS = 60 * 1000;
 export const MAX_TICKETS = 200;
 export const MAX_PLAYERS = 30;
 
-export type RoomLimits = { idleEmptyMs: number; maxAgeMs: number };
+export type RoomLimits = {
+  idleEmptyMs: number;
+  maxAgeMs: number;
+  heartbeatTimeoutMs: number;
+  heartbeatCheckMs: number;
+};
 
 export const DEFAULT_ROOM_LIMITS: RoomLimits = {
   idleEmptyMs: IDLE_EMPTY_TTL_MS,
   maxAgeMs: MAX_ROOM_AGE_MS,
+  heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+  heartbeatCheckMs: HEARTBEAT_CHECK_MS,
 };
 
 export type Ticket = {

@@ -10,4 +10,6 @@ export type Env = {
   ALLOWED_LINEAR_ORG_KEY: string;
   IDLE_EMPTY_TTL_MS?: string;
   MAX_ROOM_AGE_MS?: string;
+  HEARTBEAT_TIMEOUT_MS?: string;
+  HEARTBEAT_CHECK_MS?: string;
 };

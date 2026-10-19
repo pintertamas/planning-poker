@@ -1,12 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_PATTERN } from "@shared/protocol";
 import type { ServerErrorCode, ServerMessage } from "@shared/protocol";
-import { createRoom, nextAlarmAt, reduce, toPublicState } from "@shared/reducer";
+import { createRoom, reduce, toPublicState } from "@shared/reducer";
 import { sameSummary, summarizeRoom } from "@shared/sessions";
 import type { RoomLimits, ServerRoom, SessionSummary } from "@shared/types";
 import { sha256Hex, timingSafeEqualHex } from "./auth";
 import { directoryStub } from "./directory";
 import { limitsFromEnv, roomExpiry } from "./expiry";
+import { departPlayers, departedPlayerIds, isStale, nextWakeAt, staleSocketIndexes } from "./heartbeat";
 import type { Env } from "./env";
 import { ROOM_CODE_HEADER } from "./env";
 import { sanitizeAction } from "./sanitize";
@@ -19,7 +20,8 @@ const ROOM_KEY = "room";
 const HOST_HASH_KEY = "hostHash";
 const NAME_TAKEN_MESSAGE = "That name is already taken in this room.";
 
-type Attachment = { playerId: string; isHost: boolean };
+type Attachment = { playerId: string; isHost: boolean; lastSeenAt: number };
+type JoinedSocket = { socket: WebSocket; attachment: Attachment };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -36,7 +38,14 @@ const readAttachment = (ws: WebSocket): Attachment | null => {
   const value: unknown = ws.deserializeAttachment();
   if (!isRecord(value)) return null;
   if (typeof value.playerId !== "string" || typeof value.isHost !== "boolean") return null;
-  return { playerId: value.playerId, isHost: value.isHost };
+  const lastSeenAt = typeof value.lastSeenAt === "number" ? value.lastSeenAt : 0;
+  return { playerId: value.playerId, isHost: value.isHost, lastSeenAt };
+};
+
+const touchAttachment = (ws: WebSocket, now: number): void => {
+  const attachment = readAttachment(ws);
+  if (attachment === null) return;
+  ws.serializeAttachment({ ...attachment, lastSeenAt: now } satisfies Attachment);
 };
 
 const trySend = (socket: WebSocket, payload: string): void => {
@@ -85,6 +94,7 @@ export class RoomDO extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    touchAttachment(ws, Date.now());
     if (typeof message !== "string") return;
     if (message.length > MAX_MESSAGE_CHARS) {
       this.sendError(ws, "bad_request", "Message too large");
@@ -103,11 +113,12 @@ export class RoomDO extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     return this.exclusive(async () => {
-      const room = await this.loadRoom();
-      if (room === null) return;
+      const loaded = await this.loadRoom();
+      if (loaded === null) return;
       const now = Date.now();
       const limits = this.limits;
-      if (roomExpiry(room, this.joinedSockets().length, now, limits) !== null) {
+      const room = await this.sweepStaleSockets(loaded, now);
+      if (roomExpiry(room, this.liveSocketCount(now), now, limits) !== null) {
         await this.removeFromDirectory(room.code);
         await this.destroy();
         return;
@@ -118,7 +129,7 @@ export class RoomDO extends DurableObject<Env> {
         this.broadcast(next);
         await this.publishSummary(next);
       }
-      await this.ctx.storage.setAlarm(nextAlarmAt(next, limits));
+      await this.scheduleAlarm(next);
     });
   }
 
@@ -202,7 +213,7 @@ export class RoomDO extends DurableObject<Env> {
     if (claimedHash !== null) {
       await this.ctx.storage.put(HOST_HASH_KEY, claimedHash);
     }
-    ws.serializeAttachment({ playerId, isHost } satisfies Attachment);
+    ws.serializeAttachment({ playerId, isHost, lastSeenAt: now } satisfies Attachment);
     await this.commit(result.room);
     this.send(ws, { t: "welcome", playerId, isHost, state: toPublicState(result.room, now) });
     this.broadcast(result.room, ws);
@@ -248,21 +259,62 @@ export class RoomDO extends DurableObject<Env> {
     closeSocket(ws, 1000, "Closed");
     const attachment = readAttachment(ws);
     if (attachment === null) return;
-    const stillConnected = this.ctx
-      .getWebSockets()
-      .some((socket) => socket !== ws && readAttachment(socket)?.playerId === attachment.playerId);
+    ws.serializeAttachment(null);
+    const stillConnected = this.joinedEntries().some(
+      ({ attachment: other }) => other.playerId === attachment.playerId,
+    );
     if (stillConnected) return;
     const room = await this.loadRoom();
     if (room === null) return;
-    const result = reduce(room, { type: "leave", playerId: attachment.playerId }, { playerId: attachment.playerId, isHost: attachment.isHost }, Date.now());
-    if (result.error !== undefined) return;
-    await this.commit(result.room);
-    this.broadcast(result.room);
-    await this.publishSummary(result.room);
+    const next = departPlayers(room, [attachment.playerId], Date.now());
+    if (next === room) return;
+    await this.commit(next);
+    this.broadcast(next);
+    await this.publishSummary(next);
   }
 
-  private joinedSockets(): WebSocket[] {
-    return this.ctx.getWebSockets().filter((socket) => readAttachment(socket) !== null);
+  private async sweepStaleSockets(room: ServerRoom, now: number): Promise<ServerRoom> {
+    const entries = this.joinedEntries();
+    const staleIndexes = new Set(
+      staleSocketIndexes(
+        entries.map(({ attachment }) => attachment.lastSeenAt),
+        now,
+        this.limits.heartbeatTimeoutMs,
+      ),
+    );
+    if (staleIndexes.size === 0) return room;
+    const stale = entries.filter((_, index) => staleIndexes.has(index));
+    const live = entries.filter((_, index) => !staleIndexes.has(index));
+    for (const { socket } of stale) {
+      socket.serializeAttachment(null);
+      closeSocket(socket, 1001, "Connection lost");
+    }
+    const next = departPlayers(
+      room,
+      departedPlayerIds(
+        stale.map(({ attachment }) => attachment.playerId),
+        live.map(({ attachment }) => attachment.playerId),
+      ),
+      now,
+    );
+    if (next === room) return room;
+    await this.commit(next);
+    this.broadcast(next);
+    await this.publishSummary(next);
+    return next;
+  }
+
+  private joinedEntries(): JoinedSocket[] {
+    return this.ctx.getWebSockets().flatMap((socket) => {
+      const attachment = readAttachment(socket);
+      return attachment === null ? [] : [{ socket, attachment }];
+    });
+  }
+
+  private liveSocketCount(now: number): number {
+    return this.joinedEntries().filter(
+      ({ attachment }) => !isStale(attachment.lastSeenAt, now, this.limits.heartbeatTimeoutMs),
+    ).length;
   }
 
   private async destroy(): Promise<void> {
@@ -309,7 +361,18 @@ export class RoomDO extends DurableObject<Env> {
 
   private async commit(room: ServerRoom): Promise<void> {
     await this.store(room);
-    await this.ctx.storage.setAlarm(nextAlarmAt(room, this.limits));
+    await this.scheduleAlarm(room);
+  }
+
+  private async scheduleAlarm(room: ServerRoom): Promise<void> {
+    await this.ctx.storage.setAlarm(
+      nextWakeAt({
+        now: Date.now(),
+        room,
+        joinedSockets: this.joinedEntries().length,
+        limits: this.limits,
+      }),
+    );
   }
 
   private send(ws: WebSocket, message: ServerMessage): void {

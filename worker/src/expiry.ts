@@ -4,7 +4,10 @@ import type { Env } from "./env";
 
 export type RoomExpiry = "max_age" | "idle";
 
-type LimitEnv = Pick<Env, "IDLE_EMPTY_TTL_MS" | "MAX_ROOM_AGE_MS">;
+type LimitEnv = Pick<
+  Env,
+  "IDLE_EMPTY_TTL_MS" | "MAX_ROOM_AGE_MS" | "HEARTBEAT_TIMEOUT_MS" | "HEARTBEAT_CHECK_MS"
+>;
 
 const POSITIVE_INTEGER = /^[1-9]\d*$/;
 
@@ -17,6 +20,8 @@ const parseLimit = (raw: string | undefined, fallback: number): number => {
 export const limitsFromEnv = (env: LimitEnv): RoomLimits => ({
   idleEmptyMs: parseLimit(env.IDLE_EMPTY_TTL_MS, DEFAULT_ROOM_LIMITS.idleEmptyMs),
   maxAgeMs: parseLimit(env.MAX_ROOM_AGE_MS, DEFAULT_ROOM_LIMITS.maxAgeMs),
+  heartbeatTimeoutMs: parseLimit(env.HEARTBEAT_TIMEOUT_MS, DEFAULT_ROOM_LIMITS.heartbeatTimeoutMs),
+  heartbeatCheckMs: parseLimit(env.HEARTBEAT_CHECK_MS, DEFAULT_ROOM_LIMITS.heartbeatCheckMs),
 });
 
 export const roomExpiry = (

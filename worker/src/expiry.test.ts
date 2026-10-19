@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { createRoom } from "@shared/reducer";
-import { DEFAULT_ROOM_LIMITS, IDLE_EMPTY_TTL_MS, MAX_ROOM_AGE_MS } from "@shared/types";
+import {
+  DEFAULT_ROOM_LIMITS,
+  HEARTBEAT_CHECK_MS,
+  HEARTBEAT_TIMEOUT_MS,
+  IDLE_EMPTY_TTL_MS,
+  MAX_ROOM_AGE_MS,
+} from "@shared/types";
 import type { RoomLimits, ServerRoom } from "@shared/types";
 import { limitsFromEnv, roomExpiry } from "./expiry";
 
 const T0 = 1_000_000;
-const LIMITS: RoomLimits = { idleEmptyMs: 5_000, maxAgeMs: 70_000 };
+const LIMITS: RoomLimits = {
+  idleEmptyMs: 5_000,
+  maxAgeMs: 70_000,
+  heartbeatTimeoutMs: 120_000,
+  heartbeatCheckMs: 60_000,
+};
 
 const room = (): ServerRoom => createRoom("abc123", T0);
 
@@ -33,7 +44,12 @@ describe("roomExpiry", () => {
   });
 
   it("never reports idle while a socket is live, however long the room has been quiet", () => {
-    const longLived: RoomLimits = { idleEmptyMs: 5_000, maxAgeMs: 10_000_000 };
+    const longLived: RoomLimits = {
+      idleEmptyMs: 5_000,
+      maxAgeMs: 10_000_000,
+      heartbeatTimeoutMs: 120_000,
+      heartbeatCheckMs: 60_000,
+    };
     const quietSince = T0 + 1_000_000;
     expect(roomExpiry(room(), 1, quietSince, longLived)).toBeNull();
     expect(roomExpiry(room(), 2, quietSince, longLived)).toBeNull();
@@ -65,21 +81,42 @@ describe("roomExpiry", () => {
 
 describe("limitsFromEnv", () => {
   it("falls back to the defaults when nothing is set", () => {
-    expect(limitsFromEnv({})).toEqual({ idleEmptyMs: IDLE_EMPTY_TTL_MS, maxAgeMs: MAX_ROOM_AGE_MS });
+    expect(limitsFromEnv({})).toEqual({
+      idleEmptyMs: IDLE_EMPTY_TTL_MS,
+      maxAgeMs: MAX_ROOM_AGE_MS,
+      heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+      heartbeatCheckMs: HEARTBEAT_CHECK_MS,
+    });
     expect(limitsFromEnv({})).toEqual(DEFAULT_ROOM_LIMITS);
   });
 
   it("parses positive integer strings", () => {
-    expect(limitsFromEnv({ IDLE_EMPTY_TTL_MS: "4000", MAX_ROOM_AGE_MS: "15000" })).toEqual({
+    expect(
+      limitsFromEnv({
+        IDLE_EMPTY_TTL_MS: "4000",
+        MAX_ROOM_AGE_MS: "15000",
+        HEARTBEAT_TIMEOUT_MS: "4000",
+        HEARTBEAT_CHECK_MS: "2000",
+      }),
+    ).toEqual({
       idleEmptyMs: 4_000,
       maxAgeMs: 15_000,
+      heartbeatTimeoutMs: 4_000,
+      heartbeatCheckMs: 2_000,
     });
   });
 
   it.each(["", "0", "-5", "1.5", "abc", " 300", "1e3", "9007199254740993"])(
     "falls back to the default for %j",
     (raw) => {
-      expect(limitsFromEnv({ IDLE_EMPTY_TTL_MS: raw, MAX_ROOM_AGE_MS: raw })).toEqual(DEFAULT_ROOM_LIMITS);
+      expect(
+        limitsFromEnv({
+          IDLE_EMPTY_TTL_MS: raw,
+          MAX_ROOM_AGE_MS: raw,
+          HEARTBEAT_TIMEOUT_MS: raw,
+          HEARTBEAT_CHECK_MS: raw,
+        }),
+      ).toEqual(DEFAULT_ROOM_LIMITS);
     },
   );
 
@@ -87,6 +124,12 @@ describe("limitsFromEnv", () => {
     expect(limitsFromEnv({ MAX_ROOM_AGE_MS: "15000" })).toEqual({
       idleEmptyMs: IDLE_EMPTY_TTL_MS,
       maxAgeMs: 15_000,
+      heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+      heartbeatCheckMs: HEARTBEAT_CHECK_MS,
+    });
+    expect(limitsFromEnv({ HEARTBEAT_CHECK_MS: "2000" })).toEqual({
+      ...DEFAULT_ROOM_LIMITS,
+      heartbeatCheckMs: 2_000,
     });
   });
 });
