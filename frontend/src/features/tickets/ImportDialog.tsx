@@ -364,7 +364,6 @@ function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
   const [selected, setSelected] = useState<LinearProject | null>(null);
   const [onlyUnestimated, setOnlyUnestimated] = useState(true);
   const [current, setCurrent] = useState<Listing | null>(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { run: loadProjects } = projectsRequest;
   const { run: loadIssues, cancel } = listing;
@@ -427,12 +426,7 @@ function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
         <p className="pp-muted">No projects in your Linear workspace yet. Create one in Linear, or use another tab.</p>
       )}
       {projects && projects.length > 0 && (
-        <ProjectCombobox
-          projects={projects}
-          inputRef={inputRef}
-          onPick={pick}
-          onOpenChange={setDropdownOpen}
-        />
+        <ProjectCombobox projects={projects} inputRef={inputRef} onPick={pick} />
       )}
       {selected && (
         <div className="tk-project-chip-row">
@@ -474,7 +468,6 @@ function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
           onLoadMore={current.nextCursor ? loadMore : null}
         />
       )}
-      {dropdownOpen && <div className="tk-combo-reserve" aria-hidden="true" />}
     </div>
   );
 }

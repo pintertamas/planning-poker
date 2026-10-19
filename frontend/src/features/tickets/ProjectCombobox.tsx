@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { matchProjects } from "../../linear/projectSearch";
 import type { LinearProject } from "../../linear/types";
 import { Chip, Icon } from "../../ui";
@@ -8,15 +9,34 @@ type ProjectComboboxProps = {
   projects: LinearProject[];
   inputRef: RefObject<HTMLInputElement>;
   onPick: (project: LinearProject) => void;
-  onOpenChange: (open: boolean) => void;
 };
 
-export function ProjectCombobox({ projects, inputRef, onPick, onOpenChange }: ProjectComboboxProps) {
+export type PanelPlacement = { top: number; left: number; width: number; maxHeight: number };
+
+const PANEL_GAP = 8;
+const PANEL_MAX_HEIGHT = 412;
+const PANEL_MIN_HEIGHT = 120;
+const VIEWPORT_MARGIN = 16;
+
+export function placePanel(anchor: Pick<DOMRect, "bottom" | "left" | "width">, viewportHeight: number): PanelPlacement {
+  const top = anchor.bottom + PANEL_GAP;
+  const room = viewportHeight - top - VIEWPORT_MARGIN;
+  return {
+    top,
+    left: anchor.left,
+    width: anchor.width,
+    maxHeight: Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, room)),
+  };
+}
+
+export function ProjectCombobox({ projects, inputRef, onPick }: ProjectComboboxProps) {
   const baseId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLUListElement>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [placement, setPlacement] = useState<PanelPlacement | null>(null);
 
   const options = useMemo(() => matchProjects(projects, query), [projects, query]);
   const activeIndex = Math.min(active, Math.max(options.length - 1, 0));
@@ -24,18 +44,28 @@ export function ProjectCombobox({ projects, inputRef, onPick, onOpenChange }: Pr
   const listboxId = `${baseId}-listbox`;
   const optionId = (index: number) => `${baseId}-option-${index}`;
 
-  useEffect(() => {
-    onOpenChange(open);
-  }, [open, onOpenChange]);
-
-  useEffect(() => () => onOpenChange(false), [onOpenChange]);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!open || !input) return;
+    function place() {
+      if (!input) return;
+      setPlacement(placePanel(input.getBoundingClientRect(), window.innerHeight));
+    }
+    place();
+    window.addEventListener("resize", place);
+    document.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      document.removeEventListener("scroll", place, true);
+    };
+  }, [open, inputRef]);
 
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -126,37 +156,47 @@ export function ProjectCombobox({ projects, inputRef, onPick, onOpenChange }: Pr
           </button>
         )}
       </div>
-      {open && (
-        <ul id={listboxId} role="listbox" aria-label="Projects" className="tk-combo-panel">
-          {options.length === 0 ? (
-            <li role="presentation" className="tk-combo-empty">
-              No projects match
-            </li>
-          ) : (
-            options.map((project, index) => (
-              <li
-                key={project.id}
-                id={optionId(index)}
-                role="option"
-                aria-selected={index === activeIndex}
-                className={cx("tk-combo-option", index === activeIndex && "is-active")}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => choose(project)}
-              >
-                <span className="tk-combo-name">{project.name}</span>
-                <span className="tk-combo-meta">
-                  {project.teamKeys.map((key) => (
-                    <Chip key={key} tone="outline">
-                      {key}
-                    </Chip>
-                  ))}
-                  <span className="tk-combo-status">{project.stateName}</span>
-                </span>
+      {open &&
+        placement &&
+        createPortal(
+          <ul
+            ref={panelRef}
+            id={listboxId}
+            role="listbox"
+            aria-label="Projects"
+            className="tk-combo-panel"
+            style={{ top: placement.top, left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}
+          >
+            {options.length === 0 ? (
+              <li role="presentation" className="tk-combo-empty">
+                No projects match
               </li>
-            ))
-          )}
-        </ul>
-      )}
+            ) : (
+              options.map((project, index) => (
+                <li
+                  key={project.id}
+                  id={optionId(index)}
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  className={cx("tk-combo-option", index === activeIndex && "is-active")}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(project)}
+                >
+                  <span className="tk-combo-name">{project.name}</span>
+                  <span className="tk-combo-meta">
+                    {project.teamKeys.map((key) => (
+                      <Chip key={key} tone="outline">
+                        {key}
+                      </Chip>
+                    ))}
+                    <span className="tk-combo-status">{project.stateName}</span>
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }

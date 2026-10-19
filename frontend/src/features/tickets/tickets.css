@@ -384,22 +384,12 @@
 }
 
 .tk-combo {
-  position: relative;
   min-width: 0;
 }
 
-.tk-combo-reserve {
-  flex: none;
-  height: 420px;
-}
-
 .tk-combo-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  max-height: 412px;
+  position: fixed;
+  z-index: 110;
   margin: 0;
   padding: 6px;
   list-style: none;
