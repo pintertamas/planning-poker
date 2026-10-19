@@ -5,7 +5,7 @@ describe("demo service", () => {
   it("pages through the sample tickets five at a time", async () => {
     const service = createDemoService();
 
-    const first = await service.issuesFromTeam("demo-team");
+    const first = await service.issuesFromView("demo-view-sprint");
     expect(first.tickets).toHaveLength(5);
     expect(first.nextCursor).not.toBeNull();
 
@@ -76,6 +76,64 @@ describe("demo service", () => {
 
     const [updated] = (await service.issuesByRefs(["DEMO-102"])).tickets;
     expect(updated?.currentEstimate).toBe(3);
+  });
+
+  it("offers four sample projects with 12 character slug ids", async () => {
+    const projects = await createDemoService().listProjects();
+
+    expect(projects.map((project) => project.name)).toEqual([
+      "Payment Improvements",
+      "Docusense for medical report",
+      "Claims Finance Reporting",
+      "Mobile polish",
+    ]);
+    expect(projects.every((project) => /^[0-9a-f]{12}$/.test(project.slugId))).toBe(true);
+    expect(projects.every((project) => project.teamKeys.length > 0 && project.stateName !== "")).toBe(true);
+    expect(new Set(projects.map((project) => project.slugId)).size).toBe(projects.length);
+    expect(projects.find((project) => project.slugId === "5aacc6eaba64")?.name).toBe(
+      "Docusense for medical report",
+    );
+  });
+
+  it("lists only Todo tickets without an estimate for a project by default", async () => {
+    const service = createDemoService();
+    const identifiers = async (projectId: string, onlyUnestimated: boolean) => {
+      const tickets: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await service.issuesFromProject(projectId, { onlyUnestimated }, cursor);
+        tickets.push(...page.tickets.map((ticket) => ticket.identifier));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+      return tickets;
+    };
+
+    await expect(identifiers("demo-project-payments", true)).resolves.toEqual(["DEMO-101"]);
+    await expect(identifiers("demo-project-payments", false)).resolves.toEqual([
+      "DEMO-101",
+      "DEMO-103",
+      "DEMO-109",
+      "DEMO-112",
+    ]);
+    await expect(identifiers("demo-project-mobile", true)).resolves.toEqual([]);
+    await expect(identifiers("demo-project-mobile", false)).resolves.toEqual(["DEMO-111"]);
+    await expect(identifiers("demo-project-unknown", false)).resolves.toEqual([]);
+  });
+
+  it("pages project issues five at a time so the list can load more", async () => {
+    const service = createDemoService();
+
+    const first = await service.issuesFromProject("demo-project-docusense", { onlyUnestimated: true });
+    expect(first.tickets).toHaveLength(5);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await service.issuesFromProject(
+      "demo-project-docusense",
+      { onlyUnestimated: true },
+      first.nextCursor ?? undefined,
+    );
+    expect(second.tickets.map((ticket) => ticket.identifier)).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
   });
 
   it("passes the scale check for its demo team", async () => {

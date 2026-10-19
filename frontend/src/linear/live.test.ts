@@ -164,6 +164,119 @@ describe("listTeams", () => {
   });
 });
 
+function projectNode(id: string, name: string, slugId: string, teamKeys: string[] = ["CLFP"]) {
+  return {
+    id,
+    name,
+    slugId,
+    status: { name: "In Progress" },
+    teams: { nodes: teamKeys.map((key) => ({ key })) },
+  };
+}
+
+describe("listProjects", () => {
+  it("maps projects with their status name and team keys, and caches the result", async () => {
+    const mock = scriptedFetch(() => ({
+      data: {
+        projects: {
+          nodes: [projectNode("p-1", "Docusense", "5aacc6eaba64", ["CLFP", "OPS"])],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    }));
+    const service = signedInService(mock.fetch);
+
+    const first = await service.listProjects();
+    const second = await service.listProjects();
+
+    expect(first).toEqual([
+      {
+        id: "p-1",
+        name: "Docusense",
+        slugId: "5aacc6eaba64",
+        stateName: "In Progress",
+        teamKeys: ["CLFP", "OPS"],
+      },
+    ]);
+    expect(second).toBe(first);
+    expect(mock.fn).toHaveBeenCalledTimes(1);
+    expect(mock.calls[0]?.query).toContain("projects(first: 100, after: $after)");
+    expect(mock.calls[0]?.query).not.toContain("includeArchived");
+  });
+
+  it("follows pagination cursors across project pages", async () => {
+    const mock = scriptedFetch(({ variables }) => {
+      if (variables.after === "page-2") {
+        return {
+          data: {
+            projects: {
+              nodes: [projectNode("p-2", "Claims", "e41d08b3c6a9")],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        };
+      }
+      return {
+        data: {
+          projects: {
+            nodes: [projectNode("p-1", "Docusense", "5aacc6eaba64")],
+            pageInfo: { hasNextPage: true, endCursor: "page-2" },
+          },
+        },
+      };
+    });
+    const service = signedInService(mock.fetch);
+
+    const projects = await service.listProjects();
+
+    expect(projects.map((project) => project.id)).toEqual(["p-1", "p-2"]);
+    expect(mock.calls[0]?.variables.after).toBeNull();
+    expect(mock.calls[1]?.variables.after).toBe("page-2");
+  });
+
+  it("stops after five pages even when Linear has more", async () => {
+    let page = 0;
+    const mock = scriptedFetch(() => {
+      page += 1;
+      return {
+        data: {
+          projects: {
+            nodes: [projectNode(`p-${page}`, `Project ${page}`, `${page}`.padStart(12, "a"))],
+            pageInfo: { hasNextPage: true, endCursor: `page-${page + 1}` },
+          },
+        },
+      };
+    });
+    const service = signedInService(mock.fetch);
+
+    const projects = await service.listProjects();
+
+    expect(mock.fn).toHaveBeenCalledTimes(5);
+    expect(projects).toHaveLength(5);
+  });
+
+  it("retries after a failed fetch instead of caching the failure", async () => {
+    let attempt = 0;
+    const mock = scriptedFetch(() => {
+      attempt += 1;
+      if (attempt === 1) return { errors: [{ message: "temporary" }] };
+      return {
+        data: {
+          projects: {
+            nodes: [projectNode("p-1", "Docusense", "5aacc6eaba64")],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      };
+    });
+    const service = signedInService(mock.fetch);
+
+    await expect(service.listProjects()).rejects.toBeInstanceOf(LinearError);
+    await expect(service.listProjects()).resolves.toHaveLength(1);
+    expect(mock.fn).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("checkEstimateScale", () => {
   function serviceWithTeams(teams: unknown[]) {
     const mock = scriptedFetch(() => ({
@@ -234,7 +347,7 @@ describe("commitEstimate", () => {
 });
 
 describe("issue paging", () => {
-  it("passes the cursor through and returns nextCursor for team issues", async () => {
+  it("passes the cursor through and returns nextCursor for project issues", async () => {
     const mock = scriptedFetch(({ variables }) => {
       if (variables.after === "cursor-1") {
         return {
@@ -249,29 +362,51 @@ describe("issue paging", () => {
     });
     const service = signedInService(mock.fetch);
 
-    const first = await service.issuesFromTeam("team-clfp");
+    const first = await service.issuesFromProject("project-1", { onlyUnestimated: true });
     expect(first.nextCursor).toBe("cursor-1");
     expect(first.tickets.map((ticket) => ticket.identifier)).toEqual(["CLFP-1"]);
 
-    const second = await service.issuesFromTeam("team-clfp", first.nextCursor ?? undefined);
+    const second = await service.issuesFromProject(
+      "project-1",
+      { onlyUnestimated: true },
+      first.nextCursor ?? undefined,
+    );
     expect(second.nextCursor).toBeNull();
     expect(second.tickets.map((ticket) => ticket.identifier)).toEqual(["CLFP-2"]);
     expect(mock.calls[1]?.variables.after).toBe("cursor-1");
   });
 
-  it("filters team issues to Todo without an estimate", async () => {
+  it("filters project issues to open states and Todo without an estimate when onlyUnestimated is on", async () => {
     const mock = scriptedFetch(() => ({
       data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
     }));
     const service = signedInService(mock.fetch);
 
-    await service.issuesFromTeam("team-clfp");
+    await service.issuesFromProject("project-1", { onlyUnestimated: true });
 
     expect(mock.calls[0]?.variables.filter).toEqual({
-      team: { id: { eq: "team-clfp" } },
-      state: { name: { eqIgnoreCase: "Todo" } },
+      project: { id: { eq: "project-1" } },
+      state: { type: { nin: ["completed", "canceled"] }, name: { eqIgnoreCase: "Todo" } },
       estimate: { null: true },
     });
+  });
+
+  it("filters project issues to open states only when onlyUnestimated is off", async () => {
+    const mock = scriptedFetch(() => ({
+      data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
+    }));
+    const service = signedInService(mock.fetch);
+
+    await service.issuesFromProject("project-1", { onlyUnestimated: false }, "cursor-9");
+
+    expect(mock.calls[0]?.variables).toEqual({
+      filter: {
+        project: { id: { eq: "project-1" } },
+        state: { type: { nin: ["completed", "canceled"] } },
+      },
+      after: "cursor-9",
+    });
+    expect(mock.calls[0]?.query).toContain("issues(filter: $filter, first: 50, after: $after)");
   });
 
   it("reads view issues through customView and passes the cursor", async () => {

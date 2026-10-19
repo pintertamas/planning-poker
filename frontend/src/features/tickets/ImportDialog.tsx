@@ -3,18 +3,19 @@ import { MAX_TICKETS, type Ticket } from "@shared/types";
 import { useLinear } from "../../app/linearContext";
 import { useRoomApi } from "../../net/api";
 import { parseRefs } from "../../linear/parseRefs";
-import type { LinearService, LinearTeam, LinearView, ScaleCheck } from "../../linear/types";
-import { Chip, Icon, Modal, PillButton, useToast } from "../../ui";
+import type { LinearProject, LinearService, LinearView } from "../../linear/types";
+import { Chip, Icon, Modal, PillButton, Toggle, useToast } from "../../ui";
 import { cx } from "../../ui/cx";
 import { appendUnique, errorMessage, trimDescription } from "./ticketHelpers";
+import { ProjectCombobox } from "./ProjectCombobox";
 import { arrangeViews } from "./viewList";
 
-type Tab = "views" | "team" | "paste" | "search";
+type Tab = "views" | "project" | "paste" | "search";
 type Listing = { gen: number; tickets: Ticket[]; nextCursor: string | null };
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "views", label: "Views" },
-  { id: "team", label: "Team" },
+  { id: "project", label: "Project" },
   { id: "paste", label: "Paste" },
   { id: "search", label: "Search" },
 ];
@@ -356,42 +357,59 @@ function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
   );
 }
 
-function TeamTab({ service, roomIds, roomCount, onAdd }: TabProps) {
-  const teamsRequest = useRequests();
+function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
+  const projectsRequest = useRequests();
   const listing = useRequests();
-  const scaleRequest = useRequests();
-  const [teams, setTeams] = useState<LinearTeam[] | null>(null);
-  const [teamId, setTeamId] = useState("");
-  const [scale, setScale] = useState<ScaleCheck | null>(null);
+  const [projects, setProjects] = useState<LinearProject[] | null>(null);
+  const [selected, setSelected] = useState<LinearProject | null>(null);
+  const [onlyUnestimated, setOnlyUnestimated] = useState(true);
   const [current, setCurrent] = useState<Listing | null>(null);
-  const { run: loadTeams } = teamsRequest;
-  const { run: loadIssues } = listing;
-  const { run: loadScale } = scaleRequest;
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { run: loadProjects } = projectsRequest;
+  const { run: loadIssues, cancel } = listing;
 
   useEffect(() => {
-    loadTeams(() => service.listTeams(), setTeams);
-  }, [service, loadTeams]);
+    loadProjects(() => service.listProjects(), setProjects);
+  }, [service, loadProjects]);
 
-  function pick(id: string) {
-    setTeamId(id);
-    setCurrent(null);
-    setScale(null);
-    if (!id) return;
-    loadScale(
-      () => service.checkEstimateScale(id),
-      (result) => setScale(result),
-    );
+  useEffect(() => {
+    if (!projects) return;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [projects]);
+
+  function loadFirstPage(project: LinearProject, unestimated: boolean) {
     loadIssues(
-      () => service.issuesFromTeam(id),
+      () => service.issuesFromProject(project.id, { onlyUnestimated: unestimated }),
       (page) => setCurrent(nextListing(page.tickets, page.nextCursor)),
     );
   }
 
+  function pick(project: LinearProject) {
+    setSelected(project);
+    setCurrent(null);
+    loadFirstPage(project, onlyUnestimated);
+  }
+
+  function clearProject() {
+    setSelected(null);
+    setCurrent(null);
+    cancel();
+  }
+
+  function changeFilter(value: boolean) {
+    setOnlyUnestimated(value);
+    if (!selected) return;
+    setCurrent(null);
+    loadFirstPage(selected, value);
+  }
+
   function loadMore() {
-    if (!teamId || !current?.nextCursor) return;
+    if (!selected || !current?.nextCursor) return;
     const cursor = current.nextCursor;
     loadIssues(
-      () => service.issuesFromTeam(teamId, cursor),
+      () => service.issuesFromProject(selected.id, { onlyUnestimated }, cursor),
       (page) =>
         setCurrent((previous) =>
           previous
@@ -403,43 +421,60 @@ function TeamTab({ service, roomIds, roomCount, onAdd }: TabProps) {
 
   return (
     <div className="tk-tab">
-      <label className="tk-field">
-        <span className="pp-field-label">Team</span>
-        <select
-          className="pp-input tk-select"
-          value={teamId}
-          disabled={!teams}
-          onChange={(event) => pick(event.target.value)}
-        >
-          <option value="">Choose a team</option>
-          {teams?.map((team) => (
-            <option key={team.id} value={team.id}>
-              {`${team.name} (${team.key})`}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="pp-muted">Lists Todo tickets without an estimate.</p>
-      {teamsRequest.busy && <Spinner label="Loading teams" />}
-      {teamsRequest.error && <Alert tone="error">{teamsRequest.error}</Alert>}
-      {scaleRequest.error && <Alert tone="error">{scaleRequest.error}</Alert>}
-      {scale && !scale.ok && (
-        <Alert tone="warn">{`Write-back is disabled: ${scale.reason ?? "this team uses an unsupported estimate scale"}`}</Alert>
+      {projectsRequest.busy && <Spinner label="Loading projects" />}
+      {projectsRequest.error && <Alert tone="error">{projectsRequest.error}</Alert>}
+      {projects && projects.length === 0 && (
+        <p className="pp-muted">No projects in your Linear workspace yet. Create one in Linear, or use another tab.</p>
       )}
-      {listing.error && <Alert tone="error">{listing.error}</Alert>}
-      {teamId && listing.busy && !current && <Spinner label="Loading tickets" />}
-      {teamId && current && (
+      {projects && projects.length > 0 && (
+        <ProjectCombobox
+          projects={projects}
+          inputRef={inputRef}
+          onPick={pick}
+          onOpenChange={setDropdownOpen}
+        />
+      )}
+      {selected && (
+        <div className="tk-project-chip-row">
+          <span className="tk-project-chip">
+            <span className="tk-project-chip-name">{selected.name}</span>
+            <button
+              type="button"
+              className="tk-project-chip-x"
+              aria-label={`Clear project ${selected.name}`}
+              onClick={clearProject}
+            >
+              <Icon name="x" size={12} />
+            </button>
+          </span>
+        </div>
+      )}
+      {selected && (
+        <Toggle
+          checked={onlyUnestimated}
+          onChange={changeFilter}
+          label="Only Todo tickets without an estimate"
+        />
+      )}
+      {selected && listing.error && <Alert tone="error">{listing.error}</Alert>}
+      {selected && listing.busy && !current && <Spinner label="Loading tickets" />}
+      {selected && current && (
         <TicketPicker
           key={current.gen}
           listing={current}
           busy={listing.busy}
           roomIds={roomIds}
           roomCount={roomCount}
-          emptyText="No Todo tickets without an estimate in this team."
+          emptyText={
+            onlyUnestimated
+              ? `No Todo tickets without an estimate in ${selected.name}.`
+              : `${selected.name} has no open tickets.`
+          }
           onAdd={onAdd}
           onLoadMore={current.nextCursor ? loadMore : null}
         />
       )}
+      {dropdownOpen && <div className="tk-combo-reserve" aria-hidden="true" />}
     </div>
   );
 }
@@ -616,7 +651,7 @@ function ImportBody({ onDone }: { onDone: () => void }) {
       </div>
       <div role="tabpanel" id="tk-tabpanel" aria-labelledby={`tk-tab-${tab}`}>
         {tab === "views" && <ViewsTab {...shared} />}
-        {tab === "team" && <TeamTab {...shared} />}
+        {tab === "project" && <ProjectTab {...shared} />}
         {tab === "paste" && <PasteTab {...shared} text={pasteText} onTextChange={setPasteText} />}
         {tab === "search" && <SearchTab {...shared} query={query} onQueryChange={setQuery} />}
       </div>

@@ -11,10 +11,27 @@ import {
   type IdQuery,
   type NumberRange,
 } from "./searchPlan";
-import type { IssuePage, LinearService, LinearTeam, LinearView, ScaleCheck, Viewer } from "./types";
+import type {
+  IssuePage,
+  LinearProject,
+  LinearService,
+  LinearTeam,
+  LinearView,
+  ProjectIssueOptions,
+  ScaleCheck,
+  Viewer,
+} from "./types";
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type Connection<T> = { nodes: T[]; pageInfo: PageInfo };
+
+type ProjectNode = {
+  id: string;
+  name: string;
+  slugId: string;
+  status: { name: string };
+  teams: { nodes: { key: string }[] };
+};
 
 type TeamNode = {
   id: string;
@@ -42,6 +59,8 @@ type FavoriteNode = {
 };
 
 const FAVORITE_PAGE_LIMIT = 5;
+const PROJECT_PAGE_LIMIT = 5;
+const OPEN_STATE_TYPES = ["completed", "canceled"];
 
 const VIEWER_QUERY = `
   query Viewer {
@@ -95,8 +114,23 @@ const VIEW_ISSUES_QUERY = `
   }
 `;
 
-const TEAM_ISSUES_QUERY = `
-  query TeamIssues($filter: IssueFilter, $after: String) {
+const PROJECTS_QUERY = `
+  query Projects($after: String) {
+    projects(first: 100, after: $after) {
+      nodes {
+        id
+        name
+        slugId
+        status { name }
+        teams(first: 20) { nodes { key } }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+const PROJECT_ISSUES_QUERY = `
+  query ProjectIssues($filter: IssueFilter, $after: String) {
     issues(filter: $filter, first: 50, after: $after) {
       nodes { ${ISSUE_FIELDS} }
       pageInfo { hasNextPage endCursor }
@@ -211,9 +245,41 @@ async function fetchTeams(client: GraphqlClient): Promise<LinearTeam[]> {
   return nodes.map(toTeam);
 }
 
+function toProject(node: ProjectNode): LinearProject {
+  return {
+    id: node.id,
+    name: node.name,
+    slugId: node.slugId,
+    stateName: node.status.name,
+    teamKeys: node.teams.nodes.map((team) => team.key),
+  };
+}
+
+async function fetchProjects(client: GraphqlClient): Promise<LinearProject[]> {
+  const nodes = await collectAll<ProjectNode>(async (after) => {
+    const data = await client.query<{ projects: Connection<ProjectNode> }>(PROJECTS_QUERY, { after });
+    return data.projects;
+  }, PROJECT_PAGE_LIMIT);
+  return nodes.map(toProject);
+}
+
+function projectIssueFilter(projectId: string, options: ProjectIssueOptions) {
+  const project = { id: { eq: projectId } };
+  const openState = { type: { nin: OPEN_STATE_TYPES } };
+  if (!options.onlyUnestimated) {
+    return { project, state: openState };
+  }
+  return {
+    project,
+    state: { ...openState, name: { eqIgnoreCase: "Todo" } },
+    estimate: { null: true },
+  };
+}
+
 function buildLiveService(auth: AuthProvider, fetchImpl: typeof fetch): LinearService {
   const client = createGraphqlClient(auth, fetchImpl);
   let teamsCache: Promise<LinearTeam[]> | null = null;
+  let projectsCache: Promise<LinearProject[]> | null = null;
 
   function listTeams(): Promise<LinearTeam[]> {
     if (teamsCache === null) {
@@ -224,6 +290,17 @@ function buildLiveService(auth: AuthProvider, fetchImpl: typeof fetch): LinearSe
       teamsCache = pending;
     }
     return teamsCache;
+  }
+
+  function listProjects(): Promise<LinearProject[]> {
+    if (projectsCache === null) {
+      const pending = fetchProjects(client).catch((error: unknown) => {
+        projectsCache = null;
+        throw error;
+      });
+      projectsCache = pending;
+    }
+    return projectsCache;
   }
 
   async function findTeam(teamId: string): Promise<LinearTeam | undefined> {
@@ -276,13 +353,13 @@ function buildLiveService(auth: AuthProvider, fetchImpl: typeof fetch): LinearSe
     return toPage(data.customView.issues);
   }
 
-  async function issuesFromTeam(teamId: string, cursor?: string): Promise<IssuePage> {
-    const data = await client.query<{ issues: Connection<IssueNode> }>(TEAM_ISSUES_QUERY, {
-      filter: {
-        team: { id: { eq: teamId } },
-        state: { name: { eqIgnoreCase: "Todo" } },
-        estimate: { null: true },
-      },
+  async function issuesFromProject(
+    projectId: string,
+    options: ProjectIssueOptions,
+    cursor?: string,
+  ): Promise<IssuePage> {
+    const data = await client.query<{ issues: Connection<IssueNode> }>(PROJECT_ISSUES_QUERY, {
+      filter: projectIssueFilter(projectId, options),
       after: cursor ?? null,
     });
     return toPage(data.issues);
@@ -405,9 +482,10 @@ function buildLiveService(auth: AuthProvider, fetchImpl: typeof fetch): LinearSe
     mode: "live",
     getViewer,
     listTeams,
+    listProjects,
     listViews,
     issuesFromView,
-    issuesFromTeam,
+    issuesFromProject,
     issuesByRefs,
     searchIssues,
     checkEstimateScale,

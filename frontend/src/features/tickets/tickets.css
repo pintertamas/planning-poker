@@ -383,8 +383,133 @@
   gap: 6px;
 }
 
-.tk-select {
+.tk-combo {
+  position: relative;
+  min-width: 0;
+}
+
+.tk-combo-reserve {
+  flex: none;
+  height: 420px;
+}
+
+.tk-combo-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 412px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  border-radius: var(--radius-row);
+  background: var(--white);
+  box-shadow: var(--shadow-lift);
+}
+
+.tk-combo-option {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-row);
+  background: var(--white);
+  color: var(--ink);
   cursor: pointer;
+  transition: background var(--dur-fast) ease;
+}
+
+.tk-combo-option.is-active {
+  background: var(--pink-soft);
+}
+
+.tk-combo-name {
+  min-width: 0;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.tk-combo-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tk-combo-status {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--cream);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tk-combo-empty {
+  padding: 12px;
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.tk-project-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tk-project-chip {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--pink-soft);
+  color: var(--ink);
+  font-size: var(--text-small);
+  font-weight: 800;
+}
+
+.tk-project-chip-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tk-project-chip-x {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease;
+}
+
+.tk-project-chip-x:hover {
+  background: var(--cream-deep);
+}
+
+.tk-project-chip-x:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 1px;
 }
 
 .tk-textarea {

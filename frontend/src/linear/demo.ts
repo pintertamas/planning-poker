@@ -1,8 +1,18 @@
 import type { Estimate, Ticket } from "@shared/types";
 import { identifiersFor, issueNumber, matchesIdQuery, mergeTickets, parseIdQuery, SEARCH_LIMIT } from "./searchPlan";
-import type { IssuePage, LinearService, LinearTeam, LinearView, ScaleCheck, Viewer } from "./types";
+import type {
+  IssuePage,
+  LinearProject,
+  LinearService,
+  LinearTeam,
+  LinearView,
+  ProjectIssueOptions,
+  ScaleCheck,
+  Viewer,
+} from "./types";
 
 const PAGE_SIZE = 5;
+const CLOSED_STATES = ["Done", "Canceled"];
 const COMMIT_DELAY_MS = 400;
 
 const DEMO_TEAM: LinearTeam = {
@@ -51,6 +61,37 @@ const DEMO_VIEWS: LinearView[] = [
     teamKey: "DEMO",
     favorite: false,
     favoriteOrder: null,
+  },
+];
+
+const DEMO_PROJECTS: LinearProject[] = [
+  {
+    id: "demo-project-payments",
+    name: "Payment Improvements",
+    slugId: "9c2e5b7a1f40",
+    stateName: "In Progress",
+    teamKeys: ["DEMO"],
+  },
+  {
+    id: "demo-project-docusense",
+    name: "Docusense for medical report",
+    slugId: "5aacc6eaba64",
+    stateName: "Planned",
+    teamKeys: ["DEMO"],
+  },
+  {
+    id: "demo-project-claims-finance",
+    name: "Claims Finance Reporting",
+    slugId: "e41d08b3c6a9",
+    stateName: "Backlog",
+    teamKeys: ["DEMO", "OPS"],
+  },
+  {
+    id: "demo-project-mobile",
+    name: "Mobile polish",
+    slugId: "b07f3a92d18e",
+    stateName: "Paused",
+    teamKeys: ["DEMO"],
   },
 ];
 
@@ -247,8 +288,30 @@ function slugify(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+type Placement = { projectId: string; state?: string; estimate?: Estimate };
+
+const PLACEMENTS: Record<number, Placement> = {
+  101: { projectId: "demo-project-payments" },
+  103: { projectId: "demo-project-payments", estimate: 3 },
+  109: { projectId: "demo-project-payments", state: "In Progress" },
+  112: { projectId: "demo-project-payments", estimate: 8 },
+  102: { projectId: "demo-project-docusense" },
+  104: { projectId: "demo-project-docusense" },
+  106: { projectId: "demo-project-docusense" },
+  107: { projectId: "demo-project-docusense" },
+  108: { projectId: "demo-project-docusense" },
+  110: { projectId: "demo-project-docusense" },
+  105: { projectId: "demo-project-claims-finance" },
+  111: { projectId: "demo-project-mobile", estimate: 5 },
+};
+
+const TICKET_PROJECT = new Map<string, string>(
+  Object.entries(PLACEMENTS).map(([number, placement]) => [`demo-issue-${number}`, placement.projectId] as const),
+);
+
 const DEMO_TICKETS: Ticket[] = SEEDS.map((seed) => {
   const identifier = `DEMO-${seed.number}`;
+  const placement = PLACEMENTS[seed.number];
   return {
     id: `demo-issue-${seed.number}`,
     identifier,
@@ -257,10 +320,10 @@ const DEMO_TICKETS: Ticket[] = SEEDS.map((seed) => {
     url: `https://linear.app/demo/issue/${identifier}/${slugify(seed.title)}`,
     teamId: DEMO_TEAM.id,
     teamKey: DEMO_TEAM.key,
-    stateName: "Todo",
+    stateName: placement?.state ?? "Todo",
     assignee: seed.assignee,
     labels: seed.labels,
-    currentEstimate: null,
+    currentEstimate: placement?.estimate ?? null,
   };
 });
 
@@ -326,14 +389,23 @@ export function createDemoService(): LinearService {
     async listTeams() {
       return [DEMO_TEAM];
     },
+    async listProjects() {
+      return DEMO_PROJECTS;
+    },
     async listViews() {
       return DEMO_VIEWS;
     },
     async issuesFromView(_viewId: string, cursor?: string) {
       return pageOf(currentTickets(), cursor);
     },
-    async issuesFromTeam(_teamId: string, cursor?: string) {
-      return pageOf(currentTickets(), cursor);
+    async issuesFromProject(projectId: string, options: ProjectIssueOptions, cursor?: string) {
+      const tickets = currentTickets().filter(
+        (ticket) =>
+          TICKET_PROJECT.get(ticket.id) === projectId &&
+          !CLOSED_STATES.includes(ticket.stateName) &&
+          (!options.onlyUnestimated || (ticket.stateName === "Todo" && ticket.currentEstimate === null)),
+      );
+      return pageOf(tickets, cursor);
     },
     async issuesByRefs(refs: string[]) {
       return byRefs(refs);

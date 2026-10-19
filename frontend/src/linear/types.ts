@@ -10,6 +10,14 @@ export type LinearTeam = {
   groomedStateId: string | null;
 };
 
+export type LinearProject = {
+  id: string;
+  name: string;
+  slugId: string;
+  stateName: string;
+  teamKeys: string[];
+};
+
 export type LinearView = {
   id: string;
   name: string;
@@ -26,13 +34,16 @@ export type ScaleCheck = { ok: boolean; reason: string | null };
 
 export type Viewer = { id: string; name: string; email: string };
 
+export type ProjectIssueOptions = { onlyUnestimated: boolean };
+
 export interface LinearService {
   mode: "live" | "demo";
   getViewer(): Promise<Viewer>;
   listTeams(): Promise<LinearTeam[]>;
+  listProjects(): Promise<LinearProject[]>;
   listViews(): Promise<LinearView[]>;
   issuesFromView(viewId: string, cursor?: string): Promise<IssuePage>;
-  issuesFromTeam(teamId: string, cursor?: string): Promise<IssuePage>;
+  issuesFromProject(projectId: string, options: ProjectIssueOptions, cursor?: string): Promise<IssuePage>;
   issuesByRefs(refs: string[]): Promise<{ tickets: Ticket[]; notFound: string[] }>;
   searchIssues(query: string): Promise<Ticket[]>;
   checkEstimateScale(teamId: string): Promise<ScaleCheck>;
