@@ -31,6 +31,11 @@ function write(kind: Kind, key: string, value: string): void {
   safely(() => backing(kind)?.setItem(key, value));
 }
 
+function remove(kind: Kind, key: string): void {
+  memory[kind].delete(key);
+  safely(() => backing(kind)?.removeItem(key));
+}
+
 function randomHex(bytes: number): string {
   const buffer = new Uint8Array(bytes);
   crypto.getRandomValues(buffer);
@@ -89,4 +94,21 @@ export function markDemo(code: string): void {
 
 export function isDemo(code: string): boolean {
   return read("session", `pp.demo.${code}`) === "1";
+}
+
+export function markCreating(code: string): void {
+  write("session", `pp.creating.${code}`, "1");
+}
+
+export function isCreating(code: string): boolean {
+  return read("session", `pp.creating.${code}`) === "1";
+}
+
+export function clearCreating(code: string): void {
+  remove("session", `pp.creating.${code}`);
+}
+
+export function forgetHost(code: string): void {
+  remove("local", `pp.host.${code}`);
+  remove("session", `pp.demo.${code}`);
 }

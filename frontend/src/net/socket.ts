@@ -21,8 +21,10 @@ export type RoomSocketOptions = {
   playerId: string;
   name: string;
   hostSecret?: string;
+  create?: boolean;
   createSocket?: (url: string) => WebSocketLike;
   onSnapshot: (snap: Snapshot) => void;
+  onCreateSettled?: () => void;
   now?: () => number;
   random?: () => number;
 };
@@ -38,8 +40,10 @@ export class RoomSocket {
   private readonly url: string;
   private readonly playerId: string;
   private readonly hostSecret: string | undefined;
+  private create: boolean;
   private readonly createSocket: (url: string) => WebSocketLike;
   private readonly onSnapshot: (snap: Snapshot) => void;
+  private readonly onCreateSettled: () => void;
   private readonly now: () => number;
   private readonly random: () => number;
   private name: string;
@@ -64,8 +68,10 @@ export class RoomSocket {
     this.playerId = opts.playerId;
     this.name = opts.name;
     this.hostSecret = opts.hostSecret;
+    this.create = opts.create === true;
     this.createSocket = opts.createSocket ?? ((url) => new WebSocket(url));
     this.onSnapshot = opts.onSnapshot;
+    this.onCreateSettled = opts.onCreateSettled ?? (() => undefined);
     this.now = opts.now ?? (() => Date.now());
     this.random = opts.random ?? (() => Math.random());
   }
@@ -100,7 +106,7 @@ export class RoomSocket {
     this.ws = ws;
     ws.onopen = () => {
       if (this.ws === ws) {
-        this.transmit(ws, { t: "hello", playerId: this.playerId, name: this.name, hostSecret: this.hostSecret });
+        this.transmit(ws, this.hello());
       }
     };
     ws.onmessage = (event) => {
@@ -123,6 +129,7 @@ export class RoomSocket {
     const msg = parsed as ServerMessage;
     switch (msg.t) {
       case "welcome":
+        this.settleCreate();
         this.attempt = 0;
         this.setSnap({
           ...this.seedClock(msg.state.serverNow),
@@ -145,6 +152,7 @@ export class RoomSocket {
         this.applyPong(msg.clientTime, msg.serverNow);
         return;
       case "error":
+        if (msg.code === "room_closed") this.settleCreate();
         if (FATAL_CODES.has(msg.code)) {
           this.fail(msg.code, msg.message);
         } else {
@@ -216,6 +224,17 @@ export class RoomSocket {
     this.reconnectTimer = null;
     if (this.pingTimer !== null) clearInterval(this.pingTimer);
     this.pingTimer = null;
+  }
+
+  private hello(): ClientMessage {
+    const base = { t: "hello" as const, playerId: this.playerId, name: this.name, hostSecret: this.hostSecret };
+    return this.create && this.hostSecret !== undefined ? { ...base, create: true } : base;
+  }
+
+  private settleCreate(): void {
+    if (!this.create) return;
+    this.create = false;
+    this.onCreateSettled();
   }
 
   private transmit(ws: WebSocketLike, msg: ClientMessage): void {

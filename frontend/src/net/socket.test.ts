@@ -52,16 +52,20 @@ const STATE: RoomState = {
 let clock = 0;
 let snaps: Snapshot[] = [];
 
-function create(opts: { name?: string; hostSecret?: string; random?: () => number } = {}): RoomSocket {
+function create(
+  opts: { name?: string; hostSecret?: string; create?: boolean; onCreateSettled?: () => void; random?: () => number } = {},
+): RoomSocket {
   return new RoomSocket({
     url: "ws://test/ws/abc123",
     playerId: "p1",
     name: opts.name ?? "Ann",
     hostSecret: opts.hostSecret,
+    create: opts.create,
     createSocket: (url) => new FakeWebSocket(url),
     onSnapshot: (snap) => {
       snaps.push(snap);
     },
+    onCreateSettled: opts.onCreateSettled,
     now: () => clock,
     random: opts.random ?? (() => 0),
   });
@@ -214,6 +218,58 @@ describe("RoomSocket", () => {
     fake().drop();
     vi.advanceTimersByTime(60_000);
     expect(FakeWebSocket.instances.length).toBe(1);
+  });
+
+  it("asks the server to create the room only when create is requested with a host secret", () => {
+    const sock = create({ hostSecret: "s3cret", create: true });
+    sock.connect();
+    fake().open();
+    expect(fake().sent).toEqual([{ t: "hello", playerId: "p1", name: "Ann", hostSecret: "s3cret", create: true }]);
+  });
+
+  it("omits create from the hello when it was not requested", () => {
+    const sock = create({ hostSecret: "s3cret" });
+    sock.connect();
+    fake().open();
+    expect(fake().sent).toEqual([{ t: "hello", playerId: "p1", name: "Ann", hostSecret: "s3cret" }]);
+    expect(fake().sent[0]).not.toHaveProperty("create");
+  });
+
+  it("omits create from the hello when there is no host secret to create the room with", () => {
+    const sock = create({ create: true });
+    sock.connect();
+    fake().open();
+    expect(fake().sent).toEqual([{ t: "hello", playerId: "p1", name: "Ann" }]);
+    expect(fake().sent[0]).not.toHaveProperty("create");
+  });
+
+  it("clears create after the first welcome so reconnects no longer ask to create", () => {
+    const settled = vi.fn();
+    const sock = create({ hostSecret: "s3cret", create: true, onCreateSettled: settled });
+    sock.connect();
+    fake().open();
+    fake().receive({ t: "welcome", playerId: "p1", isHost: true, state: STATE });
+    expect(settled).toHaveBeenCalledTimes(1);
+    fake().drop();
+    vi.advanceTimersByTime(60_000);
+    const ws = fake();
+    ws.open();
+    expect(ws.sent).toEqual([{ t: "hello", playerId: "p1", name: "Ann", hostSecret: "s3cret" }]);
+    ws.receive({ t: "welcome", playerId: "p1", isHost: true, state: STATE });
+    expect(settled).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears create when the server answers room_closed, and does not reconnect", () => {
+    const settled = vi.fn();
+    const sock = create({ hostSecret: "s3cret", create: true, onCreateSettled: settled });
+    sock.connect();
+    fake().open();
+    fake().receive({ t: "error", code: "room_closed", message: "This session has ended." });
+    fake().drop();
+    vi.advanceTimersByTime(60_000);
+    expect(settled).toHaveBeenCalledTimes(1);
+    expect(FakeWebSocket.instances.length).toBe(1);
+    expect(latest()).toMatchObject({ status: "closed", errorCode: "room_closed" });
   });
 
   it("keeps the clock offset from the pong with the lowest round trip", () => {

@@ -9,6 +9,8 @@ type RoomProviderProps = {
   playerId: string;
   name: string;
   hostSecret?: string;
+  create?: boolean;
+  onCreateSettled?: () => void;
   children: ReactNode;
 };
 
@@ -21,7 +23,7 @@ const INITIAL: Snapshot = {
   errorCode: null,
 };
 
-export function RoomProvider({ code, playerId, name, hostSecret, children }: RoomProviderProps) {
+export function RoomProvider({ code, playerId, name, hostSecret, create, onCreateSettled, children }: RoomProviderProps) {
   const [snap, setSnap] = useState<Snapshot>(INITIAL);
   const socketRef = useRef<RoomSocket | null>(null);
 
@@ -32,9 +34,11 @@ export function RoomProvider({ code, playerId, name, hostSecret, children }: Roo
       playerId,
       name,
       hostSecret,
+      create,
       onSnapshot: (next) => {
         if (active) setSnap(next);
       },
+      onCreateSettled,
     });
     socketRef.current = socket;
     setSnap(INITIAL);

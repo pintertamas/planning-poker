@@ -10,6 +10,7 @@ import { limitsFromEnv, roomExpiry } from "./expiry";
 import type { Env } from "./env";
 import { ROOM_CODE_HEADER } from "./env";
 import { sanitizeAction } from "./sanitize";
+import { canCreateRoom } from "./roomCreation";
 
 const MAX_MESSAGE_CHARS = 900000;
 const MAX_HOST_SECRET_CHARS = 128;
@@ -157,7 +158,12 @@ export class RoomDO extends DurableObject<Env> {
     let room = await this.loadRoom();
     if (room === null) {
       const code = this.ctx.id.name;
-      if (typeof hostSecret !== "string" || code === undefined || !ROOM_CODE_PATTERN.test(code)) {
+      const creatable = canCreateRoom({
+        hasRoom: false,
+        hostSecret: typeof hostSecret === "string" ? hostSecret : null,
+        create: data.create === true,
+      });
+      if (!creatable || code === undefined || !ROOM_CODE_PATTERN.test(code)) {
         this.rejectClosed(ws);
         return;
       }
@@ -265,6 +271,8 @@ export class RoomDO extends DurableObject<Env> {
       closeSocket(socket, 1001, "Room expired");
     }
     this.room = null;
+    this.lastPushed = null;
+    await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }
 

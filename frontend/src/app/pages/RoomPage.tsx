@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRoomApi, type RoomApi } from "../../net/api";
 import { RoomProvider } from "../../net/RoomProvider";
-import { getHostSecret, getName, getPlayerId, isDemo } from "../identity";
+import { clearCreating, forgetHost, getHostSecret, getName, getPlayerId, isCreating, isDemo } from "../identity";
 import { JoinScreen } from "./JoinScreen";
 import { SessionEndedScreen } from "./SessionEndedScreen";
 import { LinearProvider } from "../linearContext";
@@ -50,6 +50,10 @@ function JoinGate({
   }, [view, name, onNameTaken]);
 
   useEffect(() => {
+    if (view === "ended") forgetHost(code);
+  }, [view, code]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setTimedOut(true), JOIN_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, []);
@@ -65,6 +69,7 @@ export function RoomPage({ code }: { code: string }) {
   const [playerId] = useState(() => getPlayerId());
   const [hostSecret] = useState(() => getHostSecret(code) ?? undefined);
   const [demo] = useState(() => isDemo(code));
+  const [creating, setCreating] = useState(() => isCreating(code));
   const [rejection, setRejection] = useState<{ rejectedName: string } | null>(null);
   const [joinError, setJoinError] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
@@ -73,6 +78,11 @@ export function RoomPage({ code }: { code: string }) {
     setJoinError(NAME_TAKEN_MESSAGE);
     setRejection({ rejectedName });
   }, []);
+
+  const settleCreate = useCallback(() => {
+    clearCreating(code);
+    setCreating(false);
+  }, [code]);
 
   function join(next: string) {
     setName(next);
@@ -92,7 +102,15 @@ export function RoomPage({ code }: { code: string }) {
 
   return (
     <LinearProvider demo={demo}>
-      <RoomProvider key={attempt} code={code} playerId={playerId} name={name} hostSecret={hostSecret}>
+      <RoomProvider
+        key={attempt}
+        code={code}
+        playerId={playerId}
+        name={name}
+        hostSecret={hostSecret}
+        create={creating}
+        onCreateSettled={settleCreate}
+      >
         <JoinGate code={code} name={name} joinError={joinError} onNameTaken={rejectName}>
           <RoomShell />
         </JoinGate>

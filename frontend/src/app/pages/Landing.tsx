@@ -14,7 +14,7 @@ import {
   useToast,
 } from "../../ui";
 import { ConnectLinearModal } from "../ConnectLinearModal";
-import { createHostSecret, generateRoomCode, getName, markDemo, setName } from "../identity";
+import { createHostSecret, generateRoomCode, getName, markCreating, markDemo, setName } from "../identity";
 import { LinearProvider, useLinear } from "../linearContext";
 import { navigate } from "../router";
 
@@ -74,6 +74,7 @@ function LandingContent() {
   function openRoom(demo: boolean) {
     const code = generateRoomCode();
     createHostSecret(code);
+    markCreating(code);
     if (demo) markDemo(code);
     navigate(`/r/${code}`);
   }
