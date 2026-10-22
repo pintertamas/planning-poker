@@ -16,6 +16,7 @@ function ticket(id: string): Ticket {
     assignee: null,
     labels: [],
     currentEstimate: null,
+    blockedBy: [],
   };
 }
 

@@ -14,6 +14,7 @@ const validTicket = {
   assignee: null,
   labels: ["backend"],
   currentEstimate: null,
+  blockedBy: [],
 };
 
 describe("sanitizeAction", () => {

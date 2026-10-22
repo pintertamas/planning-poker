@@ -14,6 +14,7 @@ const ticket = (id: string): Ticket => ({
   assignee: null,
   labels: [],
   currentEstimate: null,
+  blockedBy: [],
 });
 
 const entry = (id: string): TicketEntry => ({ ticket: ticket(id), status: "todo", finalEstimate: null, sync: "none" });
@@ -27,6 +28,7 @@ const room = (overrides: Partial<RoomState> = {}): RoomState => ({
   currentTicketId: "1",
   round: { phase: "idle", durationSec: 60, endsAt: null, voted: {}, votes: null },
   settings: { durationSec: 60, autoRevealWhenAllVoted: false },
+  manualOrder: false,
   serverNow: 0,
   ...overrides,
 });

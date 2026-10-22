@@ -38,6 +38,7 @@ const ticket = (id: string): Ticket => ({
   assignee: null,
   labels: ["backend"],
   currentEstimate: null,
+  blockedBy: [],
 });
 
 const deepFreeze = <T>(value: T): T => {
@@ -103,6 +104,7 @@ describe("createRoom", () => {
         revealed: null,
       },
       settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
+      manualOrder: false,
     });
   });
 });
@@ -900,6 +902,7 @@ describe("toPublicState", () => {
       currentTicketId: "t1",
       round: { phase: "idle", durationSec: DEFAULT_TIMER_SEC, endsAt: null, voted: { h: false, a: false, b: false }, votes: null },
       settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
+      manualOrder: false,
       serverNow: T0 + 42,
     });
     expect(pub.players).not.toBe(room.players);

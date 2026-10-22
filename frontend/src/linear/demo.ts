@@ -324,6 +324,7 @@ const DEMO_TICKETS: Ticket[] = SEEDS.map((seed) => {
     assignee: seed.assignee,
     labels: seed.labels,
     currentEstimate: placement?.estimate ?? null,
+    blockedBy: [],
   };
 });
 
