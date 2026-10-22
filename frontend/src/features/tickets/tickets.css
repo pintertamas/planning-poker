@@ -372,6 +372,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
 
 .tk-md-table {
   min-width: 0;
