@@ -1,0 +1,143 @@
+.tk-reorder-list {
+  position: relative;
+}
+
+.tk-grip,
+.tk-grip-spacer {
+  flex: none;
+  width: 22px;
+  height: 28px;
+  margin: -4px -4px -4px -6px;
+}
+
+.tk-grip {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  opacity: 0.5;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: opacity var(--dur-fast) ease, background var(--dur-fast) ease;
+}
+
+.tk-grip:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.tk-grip:active {
+  cursor: grabbing;
+}
+
+.tk-grip:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.tk-item.is-dragging .pp-side-row {
+  opacity: 0.35;
+}
+
+.tk-drop-line {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--pink-accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tk-ghost {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+  pointer-events: none;
+  transform: rotate(-1.5deg);
+}
+
+.tk-ghost .tk-row-id {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.tk-ghost .tk-row-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.tk-deps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.tk-dep {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tk-dep--blocked {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--white);
+}
+
+.pp-side-row.is-active .tk-dep--blocked {
+  background: var(--white);
+  border-color: var(--white);
+  color: var(--ink);
+}
+
+.tk-dep-warn {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--amber);
+  color: var(--ink);
+  cursor: help;
+}
+
+.tk-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-grip {
+    transition: none;
+  }
+}

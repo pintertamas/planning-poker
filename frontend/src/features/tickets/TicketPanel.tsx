@@ -5,10 +5,13 @@ import { useRoomApi } from "../../net/api";
 import { Chip, Icon, PillButton, SideRow } from "../../ui";
 import { ImportDialog } from "./ImportDialog";
 import { SyncBadge } from "./SyncBadge";
+import { TicketDependencies } from "./TicketDependencies";
 import { usePeek } from "./peek";
 import { pointsLabel } from "./ticketHelpers";
+import { useTicketReorder } from "./useTicketReorder";
 import { useWriteback } from "./useWriteback";
 import "./tickets.css";
+import "./ticketOrder.css";
 
 function RowStatus({ entry, isCurrent }: { entry: TicketEntry; isCurrent: boolean }) {
   if (!isCurrent && entry.status !== "groomed") return null;
@@ -41,6 +44,14 @@ export function TicketPanel() {
   const entries = state?.tickets ?? [];
   const currentId = state?.currentTicketId ?? null;
   const groomedCount = entries.filter((entry) => entry.status === "groomed").length;
+  const reorder = useTicketReorder({
+    entries,
+    serverKey: state,
+    enabled: isHost,
+    sendOrder: (ticketIds) => send({ type: "reorderTickets", ticketIds }),
+  });
+  const shown = reorder.displayed;
+  const dragged = reorder.drag === null ? null : shown.find((entry) => entry.ticket.id === reorder.drag?.id) ?? null;
 
   return (
     <div className="tk-panel">
@@ -48,6 +59,15 @@ export function TicketPanel() {
         <span className="tk-progress">
           {entries.length > 0 ? `${groomedCount} / ${entries.length} groomed` : "No tickets yet"}
         </span>
+        {isHost && state?.manualOrder === true && (
+          <PillButton
+            variant="ghost"
+            size="sm"
+            onClick={() => send({ type: "resetOrder" })}
+          >
+            Reset order
+          </PillButton>
+        )}
       </div>
       {isHost && (
         <PillButton
@@ -69,14 +89,36 @@ export function TicketPanel() {
           {isHost ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
         </p>
       ) : (
-        <ul className="tk-list">
-          {entries.map((entry) => {
+        <ul className="tk-list tk-reorder-list" ref={reorder.listRef}>
+          {shown.map((entry, index) => {
             const id = entry.ticket.id;
             const isCurrent = id === currentId;
             const isPeeked = !isCurrent && id === peekedId;
+            const canDrag = isHost && entry.status === "todo";
             return (
-              <li key={id} className="tk-item">
+              <li
+                key={id}
+                className={reorder.drag?.id === id ? "tk-item is-dragging" : "tk-item"}
+                ref={(el) => reorder.setRow(id, el)}
+              >
                 <SideRow active={isCurrent} peeked={isPeeked}>
+                  {canDrag && (
+                    <button
+                      type="button"
+                      className="tk-grip"
+                      aria-label={`Reorder ${entry.ticket.identifier}, position ${index + 1} of ${shown.length}. Use the arrow keys to move it.`}
+                      title="Drag to reorder"
+                      ref={(el) => reorder.setGrip(id, el)}
+                      onPointerDown={(event) => reorder.onGripPointerDown(event, id)}
+                      onPointerMove={reorder.onGripPointerMove}
+                      onPointerUp={reorder.onGripPointerUp}
+                      onPointerCancel={reorder.onGripPointerCancel}
+                      onKeyDown={(event) => reorder.onGripKeyDown(event, id)}
+                    >
+                      <Icon name="grip" size={14} />
+                    </button>
+                  )}
+                  {isHost && !canDrag && <span className="tk-grip-spacer" aria-hidden="true" />}
                   <div className="tk-row-body">
                     <button
                       type="button"
@@ -88,6 +130,7 @@ export function TicketPanel() {
                       <span className="tk-row-title">{entry.ticket.title}</span>
                     </button>
                     <RowStatus entry={entry} isCurrent={isCurrent} />
+                    <TicketDependencies entry={entry} index={index} entries={shown} />
                   </div>
                   {isHost && (
                     <div className="tk-row-actions">
@@ -117,8 +160,24 @@ export function TicketPanel() {
               </li>
             );
           })}
+          {reorder.drag !== null && reorder.drag.lineY !== null && (
+            <li className="tk-drop-line" aria-hidden="true" style={{ top: reorder.drag.lineY }} />
+          )}
         </ul>
       )}
+      {dragged !== null && reorder.drag !== null && (
+        <div
+          className="tk-ghost"
+          aria-hidden="true"
+          style={{ top: reorder.drag.pointerY - reorder.drag.grabOffset, left: reorder.drag.left, width: reorder.drag.width }}
+        >
+          <span className="tk-row-id">{dragged.ticket.identifier}</span>
+          <span className="tk-row-title">{dragged.ticket.title}</span>
+        </div>
+      )}
+      <p className="tk-sr-only" role="status" aria-live="polite">
+        {reorder.announcement}
+      </p>
       {isHost && <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />}
     </div>
   );

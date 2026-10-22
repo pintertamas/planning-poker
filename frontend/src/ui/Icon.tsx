@@ -20,7 +20,8 @@ export type IconName =
   | "play"
   | "eye"
   | "arrow-right"
-  | "alert";
+  | "alert"
+  | "grip";
 
 const GLYPHS: Record<IconName, ReactNode> = {
   room: (
@@ -108,6 +109,16 @@ const GLYPHS: Record<IconName, ReactNode> = {
     <>
       <path d="M12 3.5l9.5 16.5h-19z" />
       <path d="M12 10v4.5M12 17.2v.1" />
+    </>
+  ),
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="18" r="1" />
     </>
   ),
 };
