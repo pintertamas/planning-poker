@@ -103,9 +103,10 @@ type PickerProps = {
 function TicketPicker({ listing, busy, roomKeys, roomCount, emptyText, onAdd, onLoadMore }: PickerProps) {
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(() => new Set());
 
+  const checkedRows = listing.tickets.filter((ticket) => !excluded.has(ticket.id));
   const enabled = listing.tickets.filter((ticket) => !isInRoom(ticket, roomKeys));
-  const selected = enabled.filter((ticket) => !excluded.has(ticket.id));
-  const allSelected = enabled.length > 0 && selected.length === enabled.length;
+  const selected = checkedRows.filter((ticket) => !isInRoom(ticket, roomKeys));
+  const allSelected = listing.tickets.length > 0 && checkedRows.length === listing.tickets.length;
   const remaining = MAX_TICKETS - roomCount;
   const full = remaining <= 0;
   const overflow = selected.length > 0 && selected.length > remaining;
@@ -122,7 +123,7 @@ function TicketPicker({ listing, busy, roomKeys, roomCount, emptyText, onAdd, on
   }
 
   function toggleAll() {
-    setExcluded(allSelected ? new Set(enabled.map((ticket) => ticket.id)) : new Set());
+    setExcluded(allSelected ? new Set(listing.tickets.map((ticket) => ticket.id)) : new Set());
   }
 
   return (
@@ -133,7 +134,7 @@ function TicketPicker({ listing, busy, roomKeys, roomCount, emptyText, onAdd, on
         <ul className="tk-pick-list">
           {listing.tickets.map((ticket) => {
             const added = isInRoom(ticket, roomKeys);
-            const checked = !added && !excluded.has(ticket.id);
+            const checked = !excluded.has(ticket.id);
             return (
               <li key={ticket.id}>
                 <label className={cx("tk-pick", added && "is-added")}>
@@ -179,9 +180,9 @@ function TicketPicker({ listing, busy, roomKeys, roomCount, emptyText, onAdd, on
             variant="primary"
             size="md"
             disabled={!canAdd}
-            onClick={() => onAdd(selected)}
+            onClick={() => onAdd(checkedRows)}
           >
-            {`Add ${plural(selected.length, "ticket")}`}
+            {selected.length > 0 ? `Add ${plural(selected.length, "ticket")}` : "Nothing new to add"}
           </PillButton>
         </div>
       </div>
