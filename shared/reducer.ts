@@ -29,7 +29,6 @@ const NAME_MAX_LENGTH = 24;
 const FALLBACK_NAME = "Guest";
 
 const HOST_ONLY_ACTIONS: ReadonlySet<ServerAction["type"]> = new Set<ServerAction["type"]>([
-  "addTickets",
   "removeTicket",
   "setCurrent",
   "startRound",
@@ -192,13 +191,19 @@ const vote = (room: ServerRoom, playerId: string, value: unknown): Outcome => {
   );
 };
 
-const addTickets = (room: ServerRoom, incoming: Ticket[]): Outcome => {
+const identifierKey = (identifier: string): string => identifier.toLowerCase();
+
+const addTickets = (room: ServerRoom, actor: Actor, incoming: Ticket[]): Outcome => {
+  if (!hasPlayer(room, actor.playerId)) return fail("not_found");
   const entries = [...room.tickets];
-  const seen = new Set(entries.map((entry) => entry.ticket.id));
+  const seenIds = new Set(entries.map((entry) => entry.ticket.id));
+  const seenIdentifiers = new Set(entries.map((entry) => identifierKey(entry.ticket.identifier)));
   for (const ticket of incoming) {
     if (entries.length >= MAX_TICKETS) break;
-    if (seen.has(ticket.id)) continue;
-    seen.add(ticket.id);
+    const key = identifierKey(ticket.identifier);
+    if (seenIds.has(ticket.id) || seenIdentifiers.has(key)) continue;
+    seenIds.add(ticket.id);
+    seenIdentifiers.add(key);
     entries.push({
       ticket: { ...ticket, labels: [...ticket.labels] },
       status: "todo",
@@ -311,7 +316,7 @@ const apply = (room: ServerRoom, action: ServerAction, actor: Actor, now: number
     case "vote":
       return vote(room, actor.playerId, action.value);
     case "addTickets":
-      return addTickets(room, action.tickets);
+      return addTickets(room, actor, action.tickets);
     case "removeTicket":
       return removeTicket(room, action.ticketId);
     case "setCurrent":
