@@ -13,9 +13,10 @@ export type ModalProps = {
   children: ReactNode;
   wide?: boolean;
   dismissible?: boolean;
+  leading?: ReactNode;
 };
 
-export function Modal({ open, onClose, title, children, wide = false, dismissible = true }: ModalProps) {
+export function Modal({ open, onClose, title, children, wide = false, dismissible = true, leading }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -89,9 +90,12 @@ export function Modal({ open, onClose, title, children, wide = false, dismissibl
         className={cx("pp-modal", wide && "pp-modal--wide")}
       >
         <header className="pp-modal-head">
-          <h2 id={titleId} className="pp-modal-title">
-            {title}
-          </h2>
+          <div className="pp-modal-head-main">
+            {leading}
+            <h2 id={titleId} className="pp-modal-title">
+              {title}
+            </h2>
+          </div>
           {dismissible && (
             <button type="button" className="pp-round" aria-label="Close" onClick={onClose}>
               <Icon name="x" size={16} />
