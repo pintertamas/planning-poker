@@ -1,0 +1,23 @@
+.pp-demo-guide {
+  min-width: 0;
+}
+
+.pp-demo-guide .pp-card {
+  padding: 16px 18px 18px;
+}
+
+.pp-demo-guide-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: var(--text-small);
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.pp-demo-guide-list li::marker {
+  color: var(--pink-accent);
+  font-weight: var(--font-weight-strong);
+}

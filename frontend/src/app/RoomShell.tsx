@@ -8,10 +8,14 @@ import { useRoomApi } from "../net/api";
 import { useLinear } from "./linearContext";
 import { navigate } from "./router";
 import { RoomTopBar } from "./RoomTopBar";
+import { DemoGuideCard } from "./DemoGuideCard";
+import { useRoute } from "./router";
 
 export function RoomShell() {
   const { mode } = useLinear();
   const room = useRoomApi();
+  const route = useRoute();
+  const code = route.name === "room" ? route.code : "";
 
   return (
     <div className="pp-app">
@@ -24,6 +28,7 @@ export function RoomShell() {
       </SidePanel>
       <main className="pp-main">
         <RoomTopBar />
+        {mode === "demo" && <DemoGuideCard code={code} />}
         {mode === "none" && room.me?.isHost && (
           <div className="pp-alert pp-alert--notice" role="status">
             <span className="pp-alert-text">
