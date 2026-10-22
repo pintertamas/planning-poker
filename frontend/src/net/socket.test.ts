@@ -43,6 +43,7 @@ const STATE: RoomState = {
   code: "abc123",
   players: [{ id: "p1", name: "Ann", connected: true, isHost: true }],
   tickets: [],
+  references: {},
   currentTicketId: null,
   round: { phase: "idle", durationSec: 60, endsAt: null, voted: {}, votes: null },
   settings: { durationSec: 60, autoRevealWhenAllVoted: false },

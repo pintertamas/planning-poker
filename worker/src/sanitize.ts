@@ -1,4 +1,4 @@
-import { MAX_TICKETS } from "@shared/types";
+import { MAX_REFERENCES, MAX_TICKETS } from "@shared/types";
 import type { ClientAction, Estimate, Ticket, TicketSync } from "@shared/types";
 
 const TICKET_SYNC_VALUES: readonly unknown[] = ["none", "pending", "syncing", "synced", "failed"];
@@ -79,8 +79,8 @@ const sanitizeTicket = (value: unknown): Ticket | undefined => {
   };
 };
 
-const sanitizeTickets = (value: unknown): Ticket[] | undefined => {
-  if (!Array.isArray(value) || value.length > MAX_TICKETS) return undefined;
+const sanitizeTickets = (value: unknown, limit: number = MAX_TICKETS): Ticket[] | undefined => {
+  if (!Array.isArray(value) || value.length > limit) return undefined;
   const tickets: Ticket[] = [];
   for (const raw of value) {
     const ticket = sanitizeTicket(raw);
@@ -104,6 +104,10 @@ export function sanitizeAction(action: unknown): ClientAction | null {
     case "addTickets": {
       const tickets = sanitizeTickets(action.tickets);
       return tickets === undefined ? null : { type: "addTickets", tickets };
+    }
+    case "addReferences": {
+      const tickets = sanitizeTickets(action.tickets, MAX_REFERENCES);
+      return tickets === undefined ? null : { type: "addReferences", tickets };
     }
     case "removeTicket": {
       return typeof action.ticketId === "string"
