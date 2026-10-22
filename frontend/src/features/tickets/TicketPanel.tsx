@@ -38,6 +38,7 @@ export function TicketPanel() {
   useWriteback();
 
   const isHost = me?.isHost === true;
+  const canImport = isHost || service !== null;
   const entries = state?.tickets ?? [];
   const currentId = state?.currentTicketId ?? null;
   const groomedCount = entries.filter((entry) => entry.status === "groomed").length;
@@ -49,7 +50,7 @@ export function TicketPanel() {
           {entries.length > 0 ? `${groomedCount} / ${entries.length} groomed` : "No tickets yet"}
         </span>
       </div>
-      {isHost && (
+      {canImport && (
         <PillButton
           variant="primary"
           size="sm"
@@ -66,7 +67,7 @@ export function TicketPanel() {
       )}
       {entries.length === 0 ? (
         <p className="tk-empty">
-          {isHost ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
+          {canImport ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
         </p>
       ) : (
         <ul className="tk-list">
@@ -119,7 +120,7 @@ export function TicketPanel() {
           })}
         </ul>
       )}
-      {isHost && <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />}
+      {canImport && <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />}
     </div>
   );
 }

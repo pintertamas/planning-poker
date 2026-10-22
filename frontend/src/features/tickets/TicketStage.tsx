@@ -21,6 +21,7 @@ export function TicketStage() {
   const previousCurrent = useRef<string | null>(state?.currentTicketId ?? null);
 
   const isHost = me?.isHost === true;
+  const canImport = isHost || service !== null;
   const entries = state?.tickets ?? [];
   const currentId = state?.currentTicketId ?? null;
   const currentEntry = entries.find((entry) => entry.ticket.id === currentId) ?? null;
@@ -70,7 +71,7 @@ export function TicketStage() {
       <HeroCard
         title="No tickets yet"
         actions={
-          isHost ? (
+          canImport ? (
             <>
               <PillButton variant="primary" size="md" icon="plus" disabled={!service} onClick={() => setImportOpen(true)}>
                 Import tickets
@@ -81,7 +82,7 @@ export function TicketStage() {
         }
       >
         <p className="pp-muted">
-          {isHost ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
+          {canImport ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
         </p>
       </HeroCard>
     );
