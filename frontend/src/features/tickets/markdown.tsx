@@ -1,4 +1,6 @@
 import { Fragment, type ReactNode } from "react";
+import { MarkdownTableView } from "./MarkdownTableView";
+import { parseTable, type TableBlock } from "./markdownTable";
 import { isHttpUrl } from "./ticketHelpers";
 
 export type Inline =
@@ -15,7 +17,8 @@ export type Block =
   | { type: "list"; ordered: boolean; start: number; items: string[] }
   | { type: "code"; text: string }
   | { type: "quote"; blocks: Block[] }
-  | { type: "rule" };
+  | { type: "rule" }
+  | TableBlock;
 
 const HEADING = /^(#{1,3})\s+(.*\S)\s*$/;
 const RULE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
@@ -161,11 +164,18 @@ export function parseBlocks(source: string): Block[] {
       continue;
     }
 
+    const table = parseTable(lines, index, startsBlock);
+    if (table) {
+      blocks.push(table.block);
+      index = table.next;
+      continue;
+    }
+
     const paragraph: string[] = [line.trim()];
     index += 1;
     while (index < lines.length) {
       const next = lines[index] ?? "";
-      if (next.trim() === "" || startsBlock(next)) break;
+      if (next.trim() === "" || startsBlock(next) || parseTable(lines, index, startsBlock)) break;
       paragraph.push(next.trim());
       index += 1;
     }
@@ -246,6 +256,17 @@ function renderBlocks(blocks: Block[], keyPrefix: string): ReactNode[] {
         return <blockquote key={key}>{renderBlocks(block.blocks, key)}</blockquote>;
       case "rule":
         return <hr key={key} />;
+      case "table":
+        return (
+          <MarkdownTableView
+            key={key}
+            keyPrefix={key}
+            align={block.align}
+            header={block.header}
+            rows={block.rows}
+            renderCell={(text, cellKey) => renderInline(parseInline(text), cellKey)}
+          />
+        );
     }
   });
 }
