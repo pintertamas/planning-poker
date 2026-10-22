@@ -1,5 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearCreating, forgetHost, getHostSecret, isCreating, isDemo, markCreating, markDemo, createHostSecret } from "./identity";
+import {
+  clearCreating,
+  dismissDemoGuide,
+  forgetHost,
+  getHostSecret,
+  isCreating,
+  isDemo,
+  isDemoGuideDismissed,
+  markCreating,
+  markDemo,
+  createHostSecret,
+} from "./identity";
 
 class FakeStorage {
   private items = new Map<string, string>();
@@ -73,5 +84,16 @@ describe("forgetHost", () => {
     expect(session.has("pp.demo.forg3t1")).toBe(false);
     expect(getHostSecret("keep01")).not.toBeNull();
     expect(isDemo("keep01")).toBe(true);
+  });
+});
+
+describe("demo guide dismissal", () => {
+  it("is remembered for that room code in sessionStorage only", () => {
+    expect(isDemoGuideDismissed("gu1de01")).toBe(false);
+    dismissDemoGuide("gu1de01");
+    expect(isDemoGuideDismissed("gu1de01")).toBe(true);
+    expect(session.getItem("pp.demoGuide.gu1de01")).toBe("1");
+    expect(local.has("pp.demoGuide.gu1de01")).toBe(false);
+    expect(isDemoGuideDismissed("gu1de02")).toBe(false);
   });
 });

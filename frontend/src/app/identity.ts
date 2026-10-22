@@ -96,6 +96,14 @@ export function isDemo(code: string): boolean {
   return read("session", `pp.demo.${code}`) === "1";
 }
 
+export function isDemoGuideDismissed(code: string): boolean {
+  return read("session", `pp.demoGuide.${code}`) === "1";
+}
+
+export function dismissDemoGuide(code: string): void {
+  write("session", `pp.demoGuide.${code}`, "1");
+}
+
 export function markCreating(code: string): void {
   write("session", `pp.creating.${code}`, "1");
 }
