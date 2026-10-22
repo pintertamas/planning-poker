@@ -19,6 +19,7 @@ const known: Ticket = {
   assignee: null,
   labels: [],
   currentEstimate: null,
+  blockedBy: [],
 };
 
 function html(source: string, lookup?: (identifier: string) => Ticket | null): string {

@@ -11,6 +11,7 @@ export const ISSUE_FIELDS = `
   assignee { name }
   labels { nodes { name } }
   team { id key }
+  inverseRelations(first: 25) { nodes { type issue { id } } }
 `;
 
 export type IssueNode = {
@@ -24,6 +25,7 @@ export type IssueNode = {
   assignee: { name: string } | null;
   labels: { nodes: { name: string }[] };
   team: { id: string; key: string };
+  inverseRelations: { nodes: { type: string; issue: { id: string } }[] };
 };
 
 export function mapIssue(node: IssueNode): Ticket {
@@ -39,5 +41,8 @@ export function mapIssue(node: IssueNode): Ticket {
     assignee: node.assignee?.name ?? null,
     labels: node.labels.nodes.map((label) => label.name),
     currentEstimate: node.estimate ?? null,
+    blockedBy: node.inverseRelations.nodes
+      .filter((relation) => relation.type === "blocks")
+      .map((relation) => relation.issue.id),
   };
 }

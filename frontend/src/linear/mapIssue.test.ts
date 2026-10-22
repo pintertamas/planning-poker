@@ -13,6 +13,7 @@ function node(overrides: Partial<IssueNode> = {}): IssueNode {
     assignee: { name: "Anna" },
     labels: { nodes: [{ name: "Backend" }, { name: "Bug" }] },
     team: { id: "team-1", key: "CLFP" },
+    inverseRelations: { nodes: [] },
     ...overrides,
   };
 }
@@ -31,6 +32,7 @@ describe("mapIssue", () => {
       assignee: "Anna",
       labels: ["Backend", "Bug"],
       currentEstimate: 3,
+      blockedBy: [],
     });
   });
 
@@ -50,5 +52,21 @@ describe("mapIssue", () => {
 
   it("returns an empty label list when there are no labels", () => {
     expect(mapIssue(node({ labels: { nodes: [] } })).labels).toEqual([]);
+  });
+
+  it("maps only blocking inverse relations onto blockedBy", () => {
+    const ticket = mapIssue(
+      node({
+        inverseRelations: {
+          nodes: [
+            { type: "blocks", issue: { id: "blocker-1" } },
+            { type: "related", issue: { id: "related-1" } },
+            { type: "duplicate", issue: { id: "duplicate-1" } },
+            { type: "blocks", issue: { id: "blocker-2" } },
+          ],
+        },
+      }),
+    );
+    expect(ticket.blockedBy).toEqual(["blocker-1", "blocker-2"]);
   });
 });

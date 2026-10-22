@@ -47,6 +47,7 @@ function issueNode(identifier: string, overrides: Partial<IssueNode> = {}): Issu
     assignee: null,
     labels: { nodes: [] },
     team: { id: "team-clfp", key: "CLFP" },
+    inverseRelations: { nodes: [] },
     ...overrides,
   };
 }
@@ -81,6 +82,7 @@ function ticketFor(overrides: Partial<Ticket> = {}): Ticket {
     assignee: null,
     labels: [],
     currentEstimate: null,
+    blockedBy: [],
     ...overrides,
   };
 }

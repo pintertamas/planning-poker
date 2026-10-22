@@ -4,6 +4,9 @@ import type { ClientAction, Estimate, Ticket, TicketSync } from "@shared/types";
 const TICKET_SYNC_VALUES: readonly unknown[] = ["none", "pending", "syncing", "synced", "failed"];
 const MAX_LABELS = 20;
 const MAX_LABEL_LENGTH = 50;
+const MAX_BLOCKERS = 20;
+const MAX_ID_LENGTH = 200;
+const MAX_BLOCKER_ID_LENGTH = 100;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -36,6 +39,27 @@ const sanitizeLabels = (value: unknown): string[] | undefined => {
   return labels;
 };
 
+const sanitizeBlockedBy = (value: unknown): string[] | undefined => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_BLOCKERS) return undefined;
+  const blockers: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string" || Array.from(raw).length > MAX_BLOCKER_ID_LENGTH) return undefined;
+    blockers.push(raw);
+  }
+  return blockers;
+};
+
+const sanitizeIdList = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value) || value.length > MAX_TICKETS) return undefined;
+  const ids: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string" || Array.from(raw).length > MAX_ID_LENGTH) return undefined;
+    ids.push(raw);
+  }
+  return ids;
+};
+
 const sanitizeTicket = (value: unknown): Ticket | undefined => {
   if (!isRecord(value)) return undefined;
   const id = text(value.id, 200);
@@ -49,6 +73,7 @@ const sanitizeTicket = (value: unknown): Ticket | undefined => {
   const assignee = nullableText(value.assignee, 100);
   const labels = sanitizeLabels(value.labels);
   const currentEstimate = nullableFinite(value.currentEstimate);
+  const blockedBy = sanitizeBlockedBy(value.blockedBy);
   if (
     id === undefined ||
     identifier === undefined ||
@@ -60,7 +85,8 @@ const sanitizeTicket = (value: unknown): Ticket | undefined => {
     stateName === undefined ||
     assignee === undefined ||
     labels === undefined ||
-    currentEstimate === undefined
+    currentEstimate === undefined ||
+    blockedBy === undefined
   ) {
     return undefined;
   }
@@ -76,6 +102,7 @@ const sanitizeTicket = (value: unknown): Ticket | undefined => {
     assignee,
     labels,
     currentEstimate,
+    blockedBy,
   };
 };
 
@@ -137,6 +164,13 @@ export function sanitizeAction(action: unknown): ClientAction | null {
       if (typeof action.ticketId !== "string") return null;
       if (!TICKET_SYNC_VALUES.includes(action.sync)) return null;
       return { type: "setSync", ticketId: action.ticketId, sync: action.sync as TicketSync };
+    }
+    case "reorderTickets": {
+      const ticketIds = sanitizeIdList(action.ticketIds);
+      return ticketIds === undefined ? null : { type: "reorderTickets", ticketIds };
+    }
+    case "resetOrder": {
+      return { type: "resetOrder" };
     }
     case "updateSettings": {
       const durationSec = action.durationSec === undefined ? undefined : finite(action.durationSec);

@@ -25,6 +25,7 @@ const entry = (id: string, status: TicketEntry["status"]): TicketEntry => {
     assignee: null,
     labels: [],
     currentEstimate: null,
+    blockedBy: [],
   };
   return { ticket, status, finalEstimate: null, sync: "none" };
 };

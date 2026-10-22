@@ -3,6 +3,8 @@ import { ROOM_CODE_PATTERN } from "@shared/protocol";
 import type { ServerErrorCode, ServerMessage } from "@shared/protocol";
 import { createRoom, normalizeRoom, reduce, toPublicState } from "@shared/reducer";
 import { sameSummary, summarizeRoom } from "@shared/sessions";
+import { hydrateRoom } from "@shared/hydrateRoom";
+import type { StoredRoom } from "@shared/hydrateRoom";
 import type { RoomLimits, ServerRoom, SessionSummary } from "@shared/types";
 import { sha256Hex, timingSafeEqualHex } from "./auth";
 import { directoryStub } from "./directory";
@@ -349,8 +351,8 @@ export class RoomDO extends DurableObject<Env> {
 
   private async loadRoom(): Promise<ServerRoom | null> {
     if (this.room === null) {
-      const stored = await this.ctx.storage.get<ServerRoom>(ROOM_KEY);
-      this.room = stored === undefined ? null : normalizeRoom(stored);
+      const stored = await this.ctx.storage.get<StoredRoom>(ROOM_KEY);
+      this.room = stored === undefined ? null : normalizeRoom(hydrateRoom(stored));
     }
     return this.room;
   }

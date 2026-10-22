@@ -47,6 +47,7 @@ const STATE: RoomState = {
   currentTicketId: null,
   round: { phase: "idle", durationSec: 60, endsAt: null, voted: {}, votes: null },
   settings: { durationSec: 60, autoRevealWhenAllVoted: false },
+  manualOrder: false,
   serverNow: 1_000,
 };
 

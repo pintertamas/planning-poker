@@ -8,6 +8,7 @@ import {
   MAX_TICKETS,
   TIMER_OPTIONS_SEC,
 } from "./types";
+import { applyPermutation, defaultOrder } from "./ticketOrder";
 import type {
   Actor,
   CardValue,
@@ -39,6 +40,8 @@ const HOST_ONLY_ACTIONS: ReadonlySet<ServerAction["type"]> = new Set<ServerActio
   "accept",
   "setSync",
   "updateSettings",
+  "reorderTickets",
+  "resetOrder",
 ]);
 
 const ok = (room: ServerRoom): Outcome => ({ room });
@@ -221,22 +224,24 @@ const identifierKey = (identifier: string): string => identifier.toLowerCase();
 
 const addTickets = (room: ServerRoom, actor: Actor, incoming: Ticket[]): Outcome => {
   if (!hasPlayer(room, actor.playerId)) return fail("not_found");
-  const entries = [...room.tickets];
-  const seenIds = new Set(entries.map((entry) => entry.ticket.id));
-  const seenIdentifiers = new Set(entries.map((entry) => identifierKey(entry.ticket.identifier)));
+  const existing = [...room.tickets];
+  const seenIds = new Set(existing.map((entry) => entry.ticket.id));
+  const seenIdentifiers = new Set(existing.map((entry) => identifierKey(entry.ticket.identifier)));
+  const fresh: TicketEntry[] = [];
   for (const ticket of incoming) {
-    if (entries.length >= MAX_TICKETS) break;
+    if (existing.length + fresh.length >= MAX_TICKETS) break;
     const key = identifierKey(ticket.identifier);
     if (seenIds.has(ticket.id) || seenIdentifiers.has(key)) continue;
     seenIds.add(ticket.id);
     seenIdentifiers.add(key);
-    entries.push({
-      ticket: { ...ticket, labels: [...ticket.labels] },
+    fresh.push({
+      ticket: { ...ticket, labels: [...ticket.labels], blockedBy: [...ticket.blockedBy] },
       status: "todo",
       finalEstimate: null,
       sync: "none",
     });
   }
+  const entries = placeAdded(existing, fresh, room.manualOrder, activeTicketId(room));
   const added = entries.length > room.tickets.length;
   const currentTicketId =
     room.currentTicketId === null && added
@@ -244,6 +249,28 @@ const addTickets = (room: ServerRoom, actor: Actor, incoming: Ticket[]): Outcome
       : room.currentTicketId;
   return ok({ ...room, tickets: entries, currentTicketId });
 };
+
+const activeTicketId = (room: ServerRoom): string | null =>
+  room.round.phase === "idle" ? null : room.currentTicketId;
+
+const placeAdded = (
+  existing: TicketEntry[],
+  fresh: TicketEntry[],
+  manualOrder: boolean,
+  pinnedId: string | null,
+): TicketEntry[] => {
+  if (fresh.length === 0) return existing;
+  return manualOrder ? [...existing, ...defaultOrder(fresh)] : defaultOrder([...existing, ...fresh], pinnedId);
+};
+
+const reorderTickets = (room: ServerRoom, ticketIds: string[]): Outcome => {
+  const tickets = applyPermutation(room.tickets, ticketIds);
+  if (tickets === null) return fail("bad_request");
+  return ok({ ...room, tickets, manualOrder: true });
+};
+
+const resetOrder = (room: ServerRoom): Outcome =>
+  ok({ ...room, tickets: defaultOrder(room.tickets, activeTicketId(room)), manualOrder: false });
 
 const removeTicket = (room: ServerRoom, ticketId: string): Outcome => {
   const index = room.tickets.findIndex((entry) => entry.ticket.id === ticketId);
@@ -361,6 +388,10 @@ const apply = (room: ServerRoom, action: ServerAction, actor: Actor, now: number
       return setSync(room, action.ticketId, action.sync);
     case "updateSettings":
       return updateSettings(room, action.durationSec, action.autoRevealWhenAllVoted);
+    case "reorderTickets":
+      return reorderTickets(room, action.ticketIds);
+    case "resetOrder":
+      return resetOrder(room);
   }
 };
 
@@ -385,6 +416,7 @@ export function createRoom(code: string, now: number): ServerRoom {
       durationSec: DEFAULT_TIMER_SEC,
       autoRevealWhenAllVoted: true,
     },
+    manualOrder: false,
   };
 }
 
@@ -437,6 +469,7 @@ export function toPublicState(stored: ServerRoom, now: number): RoomState {
       votes: room.round.phase === "revealed" ? room.round.revealed : null,
     },
     settings: { ...room.settings },
+    manualOrder: room.manualOrder,
     serverNow: now,
   };
 }

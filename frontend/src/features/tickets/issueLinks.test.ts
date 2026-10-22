@@ -14,6 +14,7 @@ const ticket = (identifier: string, title = `Title ${identifier}`): Ticket => ({
   assignee: null,
   labels: [],
   currentEstimate: null,
+  blockedBy: [],
 });
 
 const entry = (identifier: string): TicketEntry => ({

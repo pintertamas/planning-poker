@@ -40,6 +40,7 @@ export type Ticket = {
   assignee: string | null;
   labels: string[];
   currentEstimate: number | null;
+  blockedBy: string[];
 };
 
 export type TicketSync = "none" | "pending" | "syncing" | "synced" | "failed";
@@ -81,6 +82,7 @@ export type RoomState = {
   currentTicketId: string | null;
   round: Round;
   settings: RoomSettings;
+  manualOrder: boolean;
   serverNow: number;
 };
 
@@ -103,6 +105,7 @@ export type ServerRoom = {
   currentTicketId: string | null;
   round: ServerRound;
   settings: RoomSettings;
+  manualOrder: boolean;
 };
 
 export type Actor = { playerId: string; isHost: boolean };
@@ -119,7 +122,9 @@ export type ClientAction =
   | { type: "revote" }
   | { type: "accept"; estimate: Estimate }
   | { type: "setSync"; ticketId: string; sync: TicketSync }
-  | { type: "updateSettings"; durationSec?: number; autoRevealWhenAllVoted?: boolean };
+  | { type: "updateSettings"; durationSec?: number; autoRevealWhenAllVoted?: boolean }
+  | { type: "reorderTickets"; ticketIds: string[] }
+  | { type: "resetOrder" };
 
 export type ServerAction =
   | ClientAction
