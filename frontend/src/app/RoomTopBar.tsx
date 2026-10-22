@@ -2,6 +2,7 @@ import { useRoomApi, type ConnectionStatus } from "../net/api";
 import { Avatar, Chip, Icon, PillButton, TopBar, useToast } from "../ui";
 import { useLinear } from "./linearContext";
 import { navigate, useRoute } from "./router";
+import { OnlineIndicator } from "./OnlineIndicator";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
   connecting: "Connecting",
@@ -16,7 +17,6 @@ export function RoomTopBar() {
   const { status, state, me, error } = useRoomApi();
   const { mode } = useLinear();
   const code = route.name === "room" ? route.code : "";
-  const online = state ? state.players.filter((player) => player.connected).length : 0;
   const dot = status === "open" ? "open" : status === "closed" ? "closed" : "wait";
   const showBanner = status === "closed" || error !== null;
 
@@ -49,10 +49,7 @@ export function RoomTopBar() {
         }
         right={
           <>
-            <span className="pp-count">
-              <Icon name="users" size={16} />
-              {online} online
-            </span>
+            <OnlineIndicator players={state?.players ?? []} selfId={me?.playerId ?? null} />
             <Chip tone="dark">{mode === "demo" ? "DEMO" : "LIVE"}</Chip>
             {me && <Avatar name={me.name} size={32} />}
           </>
