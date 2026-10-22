@@ -312,7 +312,6 @@ describe("rename", () => {
 
 describe("host-only actions", () => {
   const hostOnly: ClientAction[] = [
-    { type: "addTickets", tickets: [ticket("t1")] },
     { type: "removeTicket", ticketId: "t1" },
     { type: "setCurrent", ticketId: "t1" },
     { type: "startRound" },
@@ -764,6 +763,50 @@ describe("addTickets", () => {
     const again = act(room, { type: "addTickets", tickets: [ticket("late")] });
     expect(again.tickets).toHaveLength(MAX_TICKETS);
     expect(again.tickets.some((e) => e.ticket.id === "late")).toBe(false);
+  });
+
+  it("skips tickets whose identifier is already present under a different id, ignoring case", () => {
+    let room = withTickets(lobby(), ["t1"]);
+    const sameIdentifier: Ticket = { ...ticket("t9"), identifier: "clm-t1" };
+    room = act(room, { type: "addTickets", tickets: [sameIdentifier, ticket("t2")] });
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("collapses tickets repeated within one batch by identifier, keeping the first", () => {
+    const room = act(lobby(), {
+      type: "addTickets",
+      tickets: [ticket("t1"), { ...ticket("t7"), identifier: "CLM-T1" }, ticket("t2")],
+    });
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("lets any joined player add tickets, not only the host", () => {
+    const room = act(lobby(), { type: "addTickets", tickets: [ticket("t1"), ticket("t2")] }, as("a"));
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2"]);
+    expect(room.currentTicketId).toBe("t1");
+  });
+
+  it("rejects addTickets from an actor who has not joined the room", () => {
+    const room = lobby();
+    const result = reduce(room, { type: "addTickets", tickets: [ticket("t1")] }, as("zz"), T0);
+    expect(result.error).toBe("not_found");
+    expect(result.room).toBe(room);
+  });
+
+  it("two overlapping batches from two different players leave one copy of each ticket in arrival order", () => {
+    let room = lobby();
+    room = act(room, { type: "addTickets", tickets: [ticket("t1"), ticket("t2"), ticket("t3")] }, as("a"));
+    room = act(room, { type: "addTickets", tickets: [ticket("t2"), ticket("t4"), ticket("t3")] }, as("b"));
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(new Set(room.tickets.map((e) => e.ticket.identifier)).size).toBe(room.tickets.length);
+    expect(room.currentTicketId).toBe("t1");
+  });
+
+  it("trusts any joined player's addTickets: the reducer cannot verify a Linear sign-in, that gate lives only in the UI", () => {
+    const room = act(lobby(), { type: "addTickets", tickets: [ticket("t1")] }, as("b"));
+    expect(room.tickets).toHaveLength(1);
+    expect(room.tickets[0]?.status).toBe("todo");
+    expect(room.tickets[0]?.sync).toBe("none");
   });
 });
 
