@@ -8,6 +8,7 @@ import {
   HEARTBEAT_TIMEOUT_MS,
   IDLE_EMPTY_TTL_MS,
   MAX_PLAYERS,
+  MAX_REFERENCES,
   MAX_ROOM_AGE_MS,
   MAX_TICKETS,
 } from "./types";
@@ -95,6 +96,7 @@ describe("createRoom", () => {
       hostId: null,
       players: [],
       tickets: [],
+      references: {},
       currentTicketId: null,
       round: {
         phase: "idle",
@@ -312,7 +314,6 @@ describe("rename", () => {
 
 describe("host-only actions", () => {
   const hostOnly: ClientAction[] = [
-    { type: "addTickets", tickets: [ticket("t1")] },
     { type: "removeTicket", ticketId: "t1" },
     { type: "setCurrent", ticketId: "t1" },
     { type: "startRound" },
@@ -765,6 +766,50 @@ describe("addTickets", () => {
     expect(again.tickets).toHaveLength(MAX_TICKETS);
     expect(again.tickets.some((e) => e.ticket.id === "late")).toBe(false);
   });
+
+  it("skips tickets whose identifier is already present under a different id, ignoring case", () => {
+    let room = withTickets(lobby(), ["t1"]);
+    const sameIdentifier: Ticket = { ...ticket("t9"), identifier: "clm-t1" };
+    room = act(room, { type: "addTickets", tickets: [sameIdentifier, ticket("t2")] });
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("collapses tickets repeated within one batch by identifier, keeping the first", () => {
+    const room = act(lobby(), {
+      type: "addTickets",
+      tickets: [ticket("t1"), { ...ticket("t7"), identifier: "CLM-T1" }, ticket("t2")],
+    });
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("lets any joined player add tickets, not only the host", () => {
+    const room = act(lobby(), { type: "addTickets", tickets: [ticket("t1"), ticket("t2")] }, as("a"));
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2"]);
+    expect(room.currentTicketId).toBe("t1");
+  });
+
+  it("rejects addTickets from an actor who has not joined the room", () => {
+    const room = lobby();
+    const result = reduce(room, { type: "addTickets", tickets: [ticket("t1")] }, as("zz"), T0);
+    expect(result.error).toBe("not_found");
+    expect(result.room).toBe(room);
+  });
+
+  it("two overlapping batches from two different players leave one copy of each ticket in arrival order", () => {
+    let room = lobby();
+    room = act(room, { type: "addTickets", tickets: [ticket("t1"), ticket("t2"), ticket("t3")] }, as("a"));
+    room = act(room, { type: "addTickets", tickets: [ticket("t2"), ticket("t4"), ticket("t3")] }, as("b"));
+    expect(room.tickets.map((e) => e.ticket.id)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(new Set(room.tickets.map((e) => e.ticket.identifier)).size).toBe(room.tickets.length);
+    expect(room.currentTicketId).toBe("t1");
+  });
+
+  it("trusts any joined player's addTickets: the reducer cannot verify a Linear sign-in, that gate lives only in the UI", () => {
+    const room = act(lobby(), { type: "addTickets", tickets: [ticket("t1")] }, as("b"));
+    expect(room.tickets).toHaveLength(1);
+    expect(room.tickets[0]?.status).toBe("todo");
+    expect(room.tickets[0]?.sync).toBe("none");
+  });
 });
 
 describe("removeTicket", () => {
@@ -899,6 +944,7 @@ describe("toPublicState", () => {
       code: "abc123",
       players: room.players,
       tickets: room.tickets,
+      references: {},
       currentTicketId: "t1",
       round: { phase: "idle", durationSec: DEFAULT_TIMER_SEC, endsAt: null, voted: { h: false, a: false, b: false }, votes: null },
       settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
@@ -1000,5 +1046,96 @@ describe("nextAlarmAt", () => {
       heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
       heartbeatCheckMs: HEARTBEAT_CHECK_MS,
     });
+  });
+});
+
+describe("addReferences", () => {
+  const linked = (identifier: string, description = ""): Ticket => ({
+    ...ticket(identifier),
+    identifier,
+    title: `Title of ${identifier}`,
+    description,
+  });
+
+  const addRefs = (room: ServerRoom, tickets: Ticket[], actor: Actor = as("a")): ServerRoom =>
+    act(room, { type: "addReferences", tickets }, actor);
+
+  it("starts every room with no references", () => {
+    expect(createRoom("abc123", T0).references).toEqual({});
+  });
+
+  it("lets any joined player add references, not only the host", () => {
+    const room = addRefs(lobby(), [linked("CTTP-1")], as("b"));
+    expect(Object.keys(room.references)).toEqual(["CTTP-1"]);
+  });
+
+  it("rejects references from someone who has not joined the room", () => {
+    const result = reduce(lobby(), { type: "addReferences", tickets: [linked("CTTP-1")] }, as("ghost"), T0);
+    expect(result.error).toBe("not_found");
+    expect(result.room.references).toEqual({});
+  });
+
+  it("keys references by the upper-cased identifier and exposes them publicly", () => {
+    const room = addRefs(lobby(), [linked("cttp-1234", "Body")]);
+    expect(room.references["CTTP-1234"]).toEqual({ ...linked("cttp-1234", "Body"), labels: ["backend"] });
+    expect(toPublicState(room, T0).references).toEqual(room.references);
+  });
+
+  it("ignores identifiers already held as references, keeping the first copy", () => {
+    let room = addRefs(lobby(), [linked("CTTP-1", "first")]);
+    room = addRefs(room, [linked("cttp-1", "second")]);
+    expect(room.references["CTTP-1"]?.description).toBe("first");
+    expect(Object.keys(room.references)).toHaveLength(1);
+  });
+
+  it("ignores identifiers that are already room tickets, ignoring case", () => {
+    const room = addRefs(
+      act(lobby(), { type: "addTickets", tickets: [{ ...ticket("x"), identifier: "CLM-9" }] }),
+      [linked("clm-9"), linked("CTTP-2")],
+    );
+    expect(Object.keys(room.references)).toEqual(["CTTP-2"]);
+  });
+
+  it("returns the same room when nothing new was added", () => {
+    const room = addRefs(lobby(), [linked("CTTP-1")]);
+    expect(reduce(room, { type: "addReferences", tickets: [linked("CTTP-1")] }, as("a"), T0).room).toBe(room);
+    expect(reduce(room, { type: "addReferences", tickets: [] }, as("a"), T0).room).toBe(room);
+  });
+
+  it("caps the map at MAX_REFERENCES and drops the extras", () => {
+    const incoming = Array.from({ length: MAX_REFERENCES + 5 }, (_, i) => linked(`CTTP-${i + 1}`));
+    const room = addRefs(lobby(), incoming);
+    expect(Object.keys(room.references)).toHaveLength(MAX_REFERENCES);
+    expect(room.references[`CTTP-${MAX_REFERENCES}`]).toBeDefined();
+    expect(room.references[`CTTP-${MAX_REFERENCES + 1}`]).toBeUndefined();
+  });
+
+  it("counts existing references against the cap", () => {
+    const first = addRefs(lobby(), Array.from({ length: MAX_REFERENCES - 1 }, (_, i) => linked(`CTTP-${i + 1}`)));
+    const room = addRefs(first, [linked("CTTP-900"), linked("CTTP-901")]);
+    expect(Object.keys(room.references)).toHaveLength(MAX_REFERENCES);
+    expect(room.references["CTTP-900"]).toBeDefined();
+    expect(room.references["CTTP-901"]).toBeUndefined();
+  });
+
+  it("truncates each description to 3000 characters", () => {
+    const room = addRefs(lobby(), [linked("CTTP-1", "x".repeat(5000))]);
+    expect(room.references["CTTP-1"]?.description).toHaveLength(3000);
+  });
+
+  it("reads a room stored before references existed as having none", () => {
+    const { references: _unused, ...legacy } = lobby();
+    const old = legacy as ServerRoom;
+    expect(toPublicState(old, T0).references).toEqual({});
+    const room = addRefs(old, [linked("CTTP-7")]);
+    expect(Object.keys(room.references)).toEqual(["CTTP-7"]);
+  });
+
+  it("keeps a legacy room usable for other actions", () => {
+    const { references: _unused, ...legacy } = lobby();
+    const result = reduce(legacy as ServerRoom, { type: "addTickets", tickets: [ticket("t9")] }, HOST, T0);
+    expect(result.error).toBeUndefined();
+    expect(result.room.references).toEqual({});
+    expect(result.room.tickets).toHaveLength(1);
   });
 });

@@ -35,8 +35,11 @@ const must = (result: ReduceResult): ServerRoom => {
 const act = (room: ServerRoom, action: ServerAction, actor: Actor = HOST): ServerRoom =>
   must(run(room, action, actor));
 
+const joinedRoom = (): ServerRoom =>
+  must(reduce(createRoom("abc123", T0), { type: "join", playerId: "h", name: "Host", asHost: true }, HOST, T0));
+
 const seeded = (...identifiers: string[]): ServerRoom => {
-  const room = createRoom("abc123", T0);
+  const room = joinedRoom();
   return act(room, { type: "addTickets", tickets: identifiers.map((identifier) => ticket(identifier)) });
 };
 
@@ -50,7 +53,7 @@ const groom = (room: ServerRoom, estimate: 1 | 2 | 3 | 5 | 8 = 3): ServerRoom =>
 
 describe("addTickets ordering when manualOrder is false", () => {
   it("adds tickets in dependency-aware default order", () => {
-    const room = act(createRoom("abc123", T0), {
+    const room = act(joinedRoom(), {
       type: "addTickets",
       tickets: [ticket("DEMO-3", ["DEMO-1"]), ticket("DEMO-2"), ticket("DEMO-1")],
     });
@@ -86,7 +89,7 @@ describe("addTickets ordering when manualOrder is false", () => {
   });
 
   it("sets the current ticket to the first todo of the new order when none was current", () => {
-    const room = act(createRoom("abc123", T0), {
+    const room = act(joinedRoom(), {
       type: "addTickets",
       tickets: [ticket("DEMO-4", ["DEMO-2"]), ticket("DEMO-2")],
     });
@@ -221,7 +224,7 @@ describe("resetOrder", () => {
   });
 
   it("orders todo tickets by blockers when resetting", () => {
-    const room = createRoom("abc123", T0);
+    const room = joinedRoom();
     const seededRoom = act(room, {
       type: "addTickets",
       tickets: [ticket("DEMO-1"), ticket("DEMO-2", ["DEMO-3"]), ticket("DEMO-3")],

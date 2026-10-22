@@ -12,6 +12,7 @@ export const HEARTBEAT_TIMEOUT_MS = 2 * 60 * 1000;
 export const HEARTBEAT_CHECK_MS = 60 * 1000;
 export const MAX_TICKETS = 200;
 export const MAX_PLAYERS = 30;
+export const MAX_REFERENCES = 80;
 
 export type RoomLimits = {
   idleEmptyMs: number;
@@ -77,6 +78,7 @@ export type RoomState = {
   code: string;
   players: Player[];
   tickets: TicketEntry[];
+  references: Record<string, Ticket>;
   currentTicketId: string | null;
   round: Round;
   settings: RoomSettings;
@@ -99,6 +101,7 @@ export type ServerRoom = {
   hostId: string | null;
   players: Player[];
   tickets: TicketEntry[];
+  references: Record<string, Ticket>;
   currentTicketId: string | null;
   round: ServerRound;
   settings: RoomSettings;
@@ -111,6 +114,7 @@ export type ClientAction =
   | { type: "rename"; name: string }
   | { type: "vote"; value: Estimate }
   | { type: "addTickets"; tickets: Ticket[] }
+  | { type: "addReferences"; tickets: Ticket[] }
   | { type: "removeTicket"; ticketId: string }
   | { type: "setCurrent"; ticketId: string }
   | { type: "startRound" }

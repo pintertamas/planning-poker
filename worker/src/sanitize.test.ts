@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeAction } from "./sanitize";
-import { MAX_TICKETS } from "@shared/types";
+import { MAX_REFERENCES, MAX_TICKETS } from "@shared/types";
 
 const validTicket = {
   id: "uuid-1",
@@ -165,5 +165,38 @@ describe("sanitizeAction", () => {
       tickets: [{ ...validTicket, currentEstimate: 5 }],
     });
     expect(result).toEqual({ type: "addTickets", tickets: [{ ...validTicket, currentEstimate: 5 }] });
+  });
+});
+
+describe("sanitizeAction addReferences", () => {
+  it("accepts a valid addReferences and strips extra fields", () => {
+    expect(sanitizeAction({ type: "addReferences", tickets: [{ ...validTicket, extra: true }] })).toEqual({
+      type: "addReferences",
+      tickets: [validTicket],
+    });
+  });
+
+  it("rejects more than MAX_REFERENCES entries", () => {
+    const tooMany = Array.from({ length: MAX_REFERENCES + 1 }, () => validTicket);
+    expect(sanitizeAction({ type: "addReferences", tickets: tooMany })).toBeNull();
+    const atLimit = Array.from({ length: MAX_REFERENCES }, () => validTicket);
+    expect(sanitizeAction({ type: "addReferences", tickets: atLimit })).not.toBeNull();
+  });
+
+  it("rejects malformed references", () => {
+    expect(sanitizeAction({ type: "addReferences", tickets: [{ ...validTicket, title: null }] })).toBeNull();
+    expect(sanitizeAction({ type: "addReferences", tickets: "CLM-1" })).toBeNull();
+    expect(sanitizeAction({ type: "addReferences" })).toBeNull();
+  });
+
+  it("truncates reference text to the ticket field limits", () => {
+    const result = sanitizeAction({
+      type: "addReferences",
+      tickets: [{ ...validTicket, description: "d".repeat(9000), title: "t".repeat(400) }],
+    });
+    expect(result).toEqual({
+      type: "addReferences",
+      tickets: [{ ...validTicket, description: "d".repeat(8000), title: "t".repeat(300) }],
+    });
   });
 });

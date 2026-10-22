@@ -1,17 +1,53 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MAX_TICKETS, type Ticket } from "@shared/types";
+import { MAX_TICKETS, type ClientAction, type Ticket, type TicketEntry } from "@shared/types";
 import { useLinear } from "../../app/linearContext";
 import { useRoomApi } from "../../net/api";
 import { parseRefs } from "../../linear/parseRefs";
 import type { LinearProject, LinearService, LinearView } from "../../linear/types";
 import { Chip, Icon, Modal, PillButton, Toggle, useToast } from "../../ui";
 import { cx } from "../../ui/cx";
-import { appendUnique, errorMessage, trimDescription } from "./ticketHelpers";
+import {
+  appendUnique,
+  errorMessage,
+  importMessage,
+  isInRoom,
+  plural,
+  roomKeysOf,
+  splitForRoom,
+  trimDescription,
+  type RoomKeys,
+} from "./ticketHelpers";
 import { ProjectCombobox } from "./ProjectCombobox";
 import { arrangeViews } from "./viewList";
+import { unresolvedIdentifiers } from "./issueLinks";
 
 type Tab = "views" | "project" | "paste" | "search";
 type Listing = { gen: number; tickets: Ticket[]; nextCursor: string | null };
+
+function requestReferences(
+  service: LinearService,
+  prepared: Ticket[],
+  entries: TicketEntry[],
+  references: Record<string, Ticket>,
+  send: (action: ClientAction) => void,
+): void {
+  const known = new Set<string>([
+    ...entries.map((entry) => entry.ticket.identifier.toUpperCase()),
+    ...prepared.map((ticket) => ticket.identifier.toUpperCase()),
+    ...Object.keys(references),
+  ]);
+  const identifiers = unresolvedIdentifiers(
+    prepared.map((ticket) => ticket.description),
+    known,
+  );
+  if (identifiers.length === 0) return;
+  service.issuesByRefs(identifiers).then(
+    ({ tickets }) => {
+      if (tickets.length > 0) send({ type: "addReferences", tickets });
+    },
+    () => undefined,
+  );
+}
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "views", label: "Views" },
@@ -27,10 +63,6 @@ let listingGeneration = 0;
 function nextListing(tickets: Ticket[], nextCursor: string | null): Listing {
   listingGeneration += 1;
   return { gen: listingGeneration, tickets, nextCursor };
-}
-
-function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 function useRequests() {
@@ -87,19 +119,20 @@ function Alert({ tone, children }: { tone: "error" | "warn"; children: ReactNode
 type PickerProps = {
   listing: Listing;
   busy: boolean;
-  roomIds: ReadonlySet<string>;
+  roomKeys: RoomKeys;
   roomCount: number;
   emptyText: string;
   onAdd: (tickets: Ticket[]) => void;
   onLoadMore: (() => void) | null;
 };
 
-function TicketPicker({ listing, busy, roomIds, roomCount, emptyText, onAdd, onLoadMore }: PickerProps) {
+function TicketPicker({ listing, busy, roomKeys, roomCount, emptyText, onAdd, onLoadMore }: PickerProps) {
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(() => new Set());
 
-  const enabled = listing.tickets.filter((ticket) => !roomIds.has(ticket.id));
-  const selected = enabled.filter((ticket) => !excluded.has(ticket.id));
-  const allSelected = enabled.length > 0 && selected.length === enabled.length;
+  const checkedRows = listing.tickets.filter((ticket) => !excluded.has(ticket.id));
+  const enabled = listing.tickets.filter((ticket) => !isInRoom(ticket, roomKeys));
+  const selected = checkedRows.filter((ticket) => !isInRoom(ticket, roomKeys));
+  const allSelected = listing.tickets.length > 0 && checkedRows.length === listing.tickets.length;
   const remaining = MAX_TICKETS - roomCount;
   const full = remaining <= 0;
   const overflow = selected.length > 0 && selected.length > remaining;
@@ -116,7 +149,7 @@ function TicketPicker({ listing, busy, roomIds, roomCount, emptyText, onAdd, onL
   }
 
   function toggleAll() {
-    setExcluded(allSelected ? new Set(enabled.map((ticket) => ticket.id)) : new Set());
+    setExcluded(allSelected ? new Set(listing.tickets.map((ticket) => ticket.id)) : new Set());
   }
 
   return (
@@ -126,8 +159,8 @@ function TicketPicker({ listing, busy, roomIds, roomCount, emptyText, onAdd, onL
       ) : (
         <ul className="tk-pick-list">
           {listing.tickets.map((ticket) => {
-            const added = roomIds.has(ticket.id);
-            const checked = !added && !excluded.has(ticket.id);
+            const added = isInRoom(ticket, roomKeys);
+            const checked = !excluded.has(ticket.id);
             return (
               <li key={ticket.id}>
                 <label className={cx("tk-pick", added && "is-added")}>
@@ -173,9 +206,9 @@ function TicketPicker({ listing, busy, roomIds, roomCount, emptyText, onAdd, onL
             variant="primary"
             size="md"
             disabled={!canAdd}
-            onClick={() => onAdd(selected)}
+            onClick={() => onAdd(checkedRows)}
           >
-            {`Add ${plural(selected.length, "ticket")}`}
+            {selected.length > 0 ? `Add ${plural(selected.length, "ticket")}` : "Nothing new to add"}
           </PillButton>
         </div>
       </div>
@@ -185,7 +218,7 @@ function TicketPicker({ listing, busy, roomIds, roomCount, emptyText, onAdd, onL
 
 type TabProps = {
   service: LinearService;
-  roomIds: ReadonlySet<string>;
+  roomKeys: RoomKeys;
   roomCount: number;
   onAdd: (tickets: Ticket[]) => void;
 };
@@ -230,7 +263,7 @@ function ViewGroup({
   );
 }
 
-function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
+function ViewsTab({ service, roomKeys, roomCount, onAdd }: TabProps) {
   const viewsRequest = useRequests();
   const listing = useRequests();
   const [views, setViews] = useState<LinearView[] | null>(null);
@@ -346,7 +379,7 @@ function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
           key={current.gen}
           listing={current}
           busy={listing.busy}
-          roomIds={roomIds}
+          roomKeys={roomKeys}
           roomCount={roomCount}
           emptyText="This view has no tickets right now."
           onAdd={onAdd}
@@ -357,7 +390,7 @@ function ViewsTab({ service, roomIds, roomCount, onAdd }: TabProps) {
   );
 }
 
-function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
+function ProjectTab({ service, roomKeys, roomCount, onAdd }: TabProps) {
   const projectsRequest = useRequests();
   const listing = useRequests();
   const [projects, setProjects] = useState<LinearProject[] | null>(null);
@@ -457,7 +490,7 @@ function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
           key={current.gen}
           listing={current}
           busy={listing.busy}
-          roomIds={roomIds}
+          roomKeys={roomKeys}
           roomCount={roomCount}
           emptyText={
             onlyUnestimated
@@ -474,7 +507,7 @@ function ProjectTab({ service, roomIds, roomCount, onAdd }: TabProps) {
 
 function PasteTab({
   service,
-  roomIds,
+  roomKeys,
   roomCount,
   onAdd,
   text,
@@ -526,7 +559,7 @@ function PasteTab({
           key={current.gen}
           listing={current}
           busy={listing.busy}
-          roomIds={roomIds}
+          roomKeys={roomKeys}
           roomCount={roomCount}
           emptyText="None of those tickets could be loaded."
           onAdd={onAdd}
@@ -539,7 +572,7 @@ function PasteTab({
 
 function SearchTab({
   service,
-  roomIds,
+  roomKeys,
   roomCount,
   onAdd,
   query,
@@ -590,7 +623,7 @@ function SearchTab({
           key={current.gen}
           listing={current}
           busy={listing.busy}
-          roomIds={roomIds}
+          roomKeys={roomKeys}
           roomCount={roomCount}
           emptyText={`No tickets match "${term}".`}
           onAdd={onAdd}
@@ -609,20 +642,26 @@ function ImportBody({ onDone }: { onDone: () => void }) {
   const [pasteText, setPasteText] = useState("");
   const [query, setQuery] = useState("");
   const entries = state?.tickets ?? [];
-  const roomIds = useMemo(() => new Set(entries.map((entry) => entry.ticket.id)), [entries]);
+  const roomKeys = useMemo(() => roomKeysOf(entries), [entries]);
 
   if (!service) {
     return <p className="pp-muted">Linear is not connected for this room. Create a new room to sign in.</p>;
   }
 
   function addTickets(tickets: Ticket[]) {
-    const prepared = tickets.map((ticket) => ({ ...ticket, description: trimDescription(ticket.description) }));
+    const { fresh, alreadyIn } = splitForRoom(tickets, roomKeys);
+    if (fresh.length === 0) {
+      toast(importMessage(0, alreadyIn), "info");
+      return;
+    }
+    const prepared = fresh.map((ticket) => ({ ...ticket, description: trimDescription(ticket.description) }));
     send({ type: "addTickets", tickets: prepared });
-    toast(`Added ${plural(prepared.length, "ticket")}`, "success");
+    if (service) requestReferences(service, prepared, entries, state?.references ?? {}, send);
+    toast(importMessage(prepared.length, alreadyIn), "success");
     onDone();
   }
 
-  const shared: TabProps = { service, roomIds, roomCount: entries.length, onAdd: addTickets };
+  const shared: TabProps = { service, roomKeys, roomCount: entries.length, onAdd: addTickets };
 
   return (
     <div className="tk-import">

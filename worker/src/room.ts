@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_PATTERN } from "@shared/protocol";
 import type { ServerErrorCode, ServerMessage } from "@shared/protocol";
-import { createRoom, reduce, toPublicState } from "@shared/reducer";
+import { createRoom, normalizeRoom, reduce, toPublicState } from "@shared/reducer";
 import { sameSummary, summarizeRoom } from "@shared/sessions";
 import { hydrateRoom } from "@shared/hydrateRoom";
 import type { StoredRoom } from "@shared/hydrateRoom";
@@ -352,7 +352,7 @@ export class RoomDO extends DurableObject<Env> {
   private async loadRoom(): Promise<ServerRoom | null> {
     if (this.room === null) {
       const stored = await this.ctx.storage.get<StoredRoom>(ROOM_KEY);
-      this.room = stored === undefined ? null : hydrateRoom(stored);
+      this.room = stored === undefined ? null : normalizeRoom(hydrateRoom(stored));
     }
     return this.room;
   }

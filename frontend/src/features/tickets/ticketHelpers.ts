@@ -42,3 +42,45 @@ export function appendUnique(existing: Ticket[], incoming: Ticket[]): Ticket[] {
   }
   return merged;
 }
+
+export function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+export type RoomKeys = { ids: ReadonlySet<string>; identifiers: ReadonlySet<string> };
+
+const identifierKey = (identifier: string): string => identifier.toLowerCase();
+
+export function roomKeysOf(entries: ReadonlyArray<{ ticket: Ticket }>): RoomKeys {
+  return {
+    ids: new Set(entries.map((entry) => entry.ticket.id)),
+    identifiers: new Set(entries.map((entry) => identifierKey(entry.ticket.identifier))),
+  };
+}
+
+export function isInRoom(ticket: Ticket, keys: RoomKeys): boolean {
+  return keys.ids.has(ticket.id) || keys.identifiers.has(identifierKey(ticket.identifier));
+}
+
+export function splitForRoom(incoming: Ticket[], keys: RoomKeys): { fresh: Ticket[]; alreadyIn: number } {
+  const fresh: Ticket[] = [];
+  const seen = { ids: new Set(keys.ids), identifiers: new Set(keys.identifiers) };
+  let alreadyIn = 0;
+  for (const ticket of incoming) {
+    if (isInRoom(ticket, keys)) {
+      alreadyIn += 1;
+      continue;
+    }
+    if (isInRoom(ticket, seen)) continue;
+    seen.ids.add(ticket.id);
+    seen.identifiers.add(identifierKey(ticket.identifier));
+    fresh.push(ticket);
+  }
+  return { fresh, alreadyIn };
+}
+
+export function importMessage(added: number, alreadyIn: number): string {
+  if (added === 0) return "Those tickets are already in the session";
+  const suffix = alreadyIn === 0 ? "" : `, ${alreadyIn === 1 ? "1 was" : `${alreadyIn} were`} already in the session`;
+  return `Added ${plural(added, "ticket")}${suffix}`;
+}

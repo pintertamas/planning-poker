@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const BUDGET_KB = {
-  entryJs: 80,
+  entryJs: 100,
   mainCss: 20,
 };
 

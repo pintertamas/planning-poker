@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLinear } from "../../app/linearContext";
 import { useRoomApi } from "../../net/api";
 import type { ScaleCheck } from "../../linear/types";
@@ -6,8 +6,9 @@ import { Chip, HeroCard, Icon, LabelValue, PillButton, SectionCard, useToast } f
 import { ImportDialog } from "./ImportDialog";
 import { SyncBadge } from "./SyncBadge";
 import { getPeekedId, usePeek } from "./peek";
-import { renderMarkdown } from "./markdown";
-import { isHttpUrl, pointsLabel } from "./ticketHelpers";
+import { TicketView } from "./TicketView";
+import { findKnownTicket } from "./issueLinks";
+import { pointsLabel } from "./ticketHelpers";
 
 export function TicketStage() {
   const { state, me, send } = useRoomApi();
@@ -21,6 +22,7 @@ export function TicketStage() {
   const previousCurrent = useRef<string | null>(state?.currentTicketId ?? null);
 
   const isHost = me?.isHost === true;
+  const canImport = isHost || service !== null;
   const entries = state?.tickets ?? [];
   const currentId = state?.currentTicketId ?? null;
   const currentEntry = entries.find((entry) => entry.ticket.id === currentId) ?? null;
@@ -29,6 +31,7 @@ export function TicketStage() {
   const isPeeking = shown !== null && shown.ticket.id !== currentId;
   const teamId = currentEntry?.ticket.teamId ?? null;
   const shouldCheckScale = isHost && mode === "live" && service !== null && teamId !== null;
+  const lookup = useCallback((identifier: string) => findKnownTicket(identifier, state), [state]);
 
   useEffect(() => {
     const previous = previousCurrent.current;
@@ -70,7 +73,7 @@ export function TicketStage() {
       <HeroCard
         title="No tickets yet"
         actions={
-          isHost ? (
+          canImport ? (
             <>
               <PillButton variant="primary" size="md" icon="plus" disabled={!service} onClick={() => setImportOpen(true)}>
                 Import tickets
@@ -81,7 +84,7 @@ export function TicketStage() {
         }
       >
         <p className="pp-muted">
-          {isHost ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
+          {canImport ? "Import tickets from Linear to start grooming." : "Waiting for the host to import tickets."}
         </p>
       </HeroCard>
     );
@@ -100,27 +103,8 @@ export function TicketStage() {
   }
 
   const ticket = shown.ticket;
-  const chips = (
-    <>
-      <Chip tone="blue">{ticket.teamKey}</Chip>
-      <Chip tone="outline">{ticket.stateName}</Chip>
-      {ticket.currentEstimate !== null && <Chip tone="teal">{pointsLabel(ticket.currentEstimate)}</Chip>}
-      {isPeeking ? <Chip tone="pink">PEEKING</Chip> : <Chip tone="dark">NOW GROOMING</Chip>}
-    </>
-  );
   const actions = (
     <>
-      {isHttpUrl(ticket.url) && (
-        <a
-          className="pp-btn pp-btn--secondary pp-btn--md tk-link-btn"
-          href={ticket.url}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Icon name="link" size={16} />
-          Open in Linear
-        </a>
-      )}
       {isPeeking && (
         <PillButton variant="secondary" size="md" onClick={() => setPeek(null)}>
           Back to current
@@ -133,6 +117,17 @@ export function TicketStage() {
       )}
     </>
   );
+  const groomedDetails =
+    shown.status === "groomed" ? (
+      <>
+        <LabelValue label="Final estimate">
+          {shown.finalEstimate !== null ? pointsLabel(shown.finalEstimate) : "Not set"}
+        </LabelValue>
+        <LabelValue label="Sync">
+          {shown.sync === "none" ? "Not synced" : <SyncBadge ticketId={ticket.id} sync={shown.sync} />}
+        </LabelValue>
+      </>
+    ) : null;
 
   return (
     <div className="tk-stage">
@@ -142,43 +137,13 @@ export function TicketStage() {
           <span>{`Write-back is disabled: ${blockedReason}`}</span>
         </div>
       )}
-      <HeroCard chips={chips} title={ticket.title}>
-        <div className="pp-hero-actions tk-stage-actions">{actions}</div>
-      </HeroCard>
-      <SectionCard title="Description">{renderMarkdown(ticket.description)}</SectionCard>
-      <SectionCard title="Details">
-        <div className="pp-grid">
-          <LabelValue label="Identifier">{ticket.identifier}</LabelValue>
-          <LabelValue label="Assignee">{ticket.assignee ?? "Unassigned"}</LabelValue>
-          <LabelValue label="Labels">
-            {ticket.labels.length > 0 ? (
-              <span className="tk-chips">
-                {ticket.labels.map((label) => (
-                  <Chip key={label} tone="outline">
-                    {label}
-                  </Chip>
-                ))}
-              </span>
-            ) : (
-              "None"
-            )}
-          </LabelValue>
-          <LabelValue label="Linear estimate">
-            {ticket.currentEstimate !== null ? pointsLabel(ticket.currentEstimate) : "Not set"}
-          </LabelValue>
-          <LabelValue label="Linear status">{ticket.stateName}</LabelValue>
-          {shown.status === "groomed" && (
-            <LabelValue label="Final estimate">
-              {shown.finalEstimate !== null ? pointsLabel(shown.finalEstimate) : "Not set"}
-            </LabelValue>
-          )}
-          {shown.status === "groomed" && (
-            <LabelValue label="Sync">
-              {shown.sync === "none" ? "Not synced" : <SyncBadge ticketId={ticket.id} sync={shown.sync} />}
-            </LabelValue>
-          )}
-        </div>
-      </SectionCard>
+      <TicketView
+        ticket={ticket}
+        lookup={lookup}
+        tags={isPeeking ? <Chip tone="pink">PEEKING</Chip> : <Chip tone="dark">NOW GROOMING</Chip>}
+        actions={actions}
+        details={groomedDetails}
+      />
     </div>
   );
 }
