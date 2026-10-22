@@ -1,6 +1,7 @@
 import { RailNav, SidePanel, PillButton } from "../ui";
 import { TicketPanel } from "../features/tickets/TicketPanel";
 import { TicketStage } from "../features/tickets/TicketStage";
+import { LinkedTicketModal } from "../features/tickets/LinkedTicketModal";
 import { TableSection } from "../features/table/TableSection";
 import { ResultsSection } from "../features/table/ResultsSection";
 import { useRoomApi } from "../net/api";
@@ -35,6 +36,7 @@ export function RoomShell() {
           </div>
         )}
         <TicketStage />
+        <LinkedTicketModal />
         <TableSection />
         <ResultsSection />
       </main>

@@ -4,6 +4,7 @@ import {
   DEFAULT_ROOM_LIMITS,
   DEFAULT_TIMER_SEC,
   MAX_PLAYERS,
+  MAX_REFERENCES,
   MAX_TICKETS,
   TIMER_OPTIONS_SEC,
 } from "./types";
@@ -27,6 +28,7 @@ type Outcome = { room: ServerRoom } | { error: string };
 
 const NAME_MAX_LENGTH = 24;
 const FALLBACK_NAME = "Guest";
+const REFERENCE_DESCRIPTION_MAX = 3000;
 
 const HOST_ONLY_ACTIONS: ReadonlySet<ServerAction["type"]> = new Set<ServerAction["type"]>([
   "removeTicket",
@@ -191,6 +193,30 @@ const vote = (room: ServerRoom, playerId: string, value: unknown): Outcome => {
   );
 };
 
+const referenceKey = (identifier: string): string => identifier.toUpperCase();
+
+const addReferences = (room: ServerRoom, playerId: string, incoming: Ticket[]): Outcome => {
+  if (!hasPlayer(room, playerId)) return fail("not_found");
+  const references = { ...room.references };
+  const roomKeys = new Set(room.tickets.map((entry) => referenceKey(entry.ticket.identifier)));
+  let count = Object.keys(references).length;
+  let added = 0;
+  for (const ticket of incoming) {
+    if (count >= MAX_REFERENCES) break;
+    const key = referenceKey(ticket.identifier);
+    if (roomKeys.has(key) || Object.prototype.hasOwnProperty.call(references, key)) continue;
+    references[key] = {
+      ...ticket,
+      description: Array.from(ticket.description).slice(0, REFERENCE_DESCRIPTION_MAX).join(""),
+      labels: [...ticket.labels],
+    };
+    count += 1;
+    added += 1;
+  }
+  if (added === 0) return ok(room);
+  return ok({ ...room, references });
+};
+
 const identifierKey = (identifier: string): string => identifier.toLowerCase();
 
 const addTickets = (room: ServerRoom, actor: Actor, incoming: Ticket[]): Outcome => {
@@ -317,6 +343,8 @@ const apply = (room: ServerRoom, action: ServerAction, actor: Actor, now: number
       return vote(room, actor.playerId, action.value);
     case "addTickets":
       return addTickets(room, actor, action.tickets);
+    case "addReferences":
+      return addReferences(room, actor.playerId, action.tickets);
     case "removeTicket":
       return removeTicket(room, action.ticketId);
     case "setCurrent":
@@ -344,6 +372,7 @@ export function createRoom(code: string, now: number): ServerRoom {
     hostId: null,
     players: [],
     tickets: [],
+    references: {},
     currentTicketId: null,
     round: {
       phase: "idle",
@@ -359,12 +388,17 @@ export function createRoom(code: string, now: number): ServerRoom {
   };
 }
 
+export function normalizeRoom(room: ServerRoom): ServerRoom {
+  return room.references === undefined ? { ...room, references: {} } : room;
+}
+
 export function reduce(
-  room: ServerRoom,
+  stored: ServerRoom,
   action: ServerAction,
   actor: Actor,
   now: number,
 ): ReduceResult {
+  const room = normalizeRoom(stored);
   if (HOST_ONLY_ACTIONS.has(action.type) && !actor.isHost) {
     return { room, error: "forbidden" };
   }
@@ -383,7 +417,8 @@ const isVoted = (room: ServerRoom, playerId: string): boolean => {
   return false;
 };
 
-export function toPublicState(room: ServerRoom, now: number): RoomState {
+export function toPublicState(stored: ServerRoom, now: number): RoomState {
+  const room = normalizeRoom(stored);
   const voted: Record<string, boolean> = {};
   for (const player of room.players) {
     voted[player.id] = isVoted(room, player.id);
@@ -392,6 +427,7 @@ export function toPublicState(room: ServerRoom, now: number): RoomState {
     code: room.code,
     players: room.players.map((player) => ({ ...player })),
     tickets: room.tickets.map((entry) => ({ ...entry })),
+    references: { ...room.references },
     currentTicketId: room.currentTicketId,
     round: {
       phase: room.round.phase,

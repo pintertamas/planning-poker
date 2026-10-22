@@ -24,6 +24,7 @@ const room = (overrides: Partial<RoomState> = {}): RoomState => ({
   code: "abc123",
   players: [player("p1", "Ada"), player("p2", "Grace")],
   tickets: [entry("1"), entry("2")],
+  references: {},
   currentTicketId: "1",
   round: { phase: "idle", durationSec: 60, endsAt: null, voted: {}, votes: null },
   settings: { durationSec: 60, autoRevealWhenAllVoted: false },

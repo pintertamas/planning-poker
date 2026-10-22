@@ -337,6 +337,42 @@
   text-underline-offset: 3px;
 }
 
+.tk-md a.tk-issue-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+  padding: 1px 10px;
+  border: 1px solid var(--cream-deep);
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 0.9em;
+  font-weight: 400;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background-color 150ms ease-out;
+}
+
+.tk-md a.tk-issue-chip:hover {
+  background: var(--cream-deep);
+}
+
+.tk-issue-chip-id {
+  flex-shrink: 0;
+  font-weight: var(--font-weight-strong);
+}
+
+.tk-issue-chip-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
 .tk-md-table {
   min-width: 0;
   max-width: 100%;

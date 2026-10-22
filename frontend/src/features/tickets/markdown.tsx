@@ -2,6 +2,8 @@ import { Fragment, type ReactNode } from "react";
 import { MarkdownTableView } from "./MarkdownTableView";
 import { parseTable, type TableBlock } from "./markdownTable";
 import { isHttpUrl } from "./ticketHelpers";
+import { parseIssueUrl, type IssueLookup } from "./issueLinks";
+import { IssueChip, IssueLookupContext } from "./IssueChip";
 
 export type Inline =
   | { type: "text"; value: string }
@@ -197,12 +199,15 @@ function renderInline(nodes: Inline[], keyPrefix: string): ReactNode[] {
         return <strong key={key}>{renderInline(node.children, key)}</strong>;
       case "em":
         return <em key={key}>{renderInline(node.children, key)}</em>;
-      case "link":
+      case "link": {
+        const identifier = parseIssueUrl(node.href);
+        if (identifier !== null) return <IssueChip key={key} href={node.href} identifier={identifier} />;
         return (
           <a key={key} href={node.href} target="_blank" rel="noopener noreferrer">
             {node.label}
           </a>
         );
+      }
       case "image":
         return (
           <a key={key} href={node.href} target="_blank" rel="noopener noreferrer">
@@ -271,7 +276,9 @@ function renderBlocks(blocks: Block[], keyPrefix: string): ReactNode[] {
   });
 }
 
-export function renderMarkdown(source: string): ReactNode {
+export function renderMarkdown(source: string, issueLookup?: IssueLookup): ReactNode {
   if (source.trim() === "") return <p className="pp-muted">No description</p>;
-  return <div className="tk-md">{renderBlocks(parseBlocks(source), "b")}</div>;
+  const body = <div className="tk-md">{renderBlocks(parseBlocks(source), "b")}</div>;
+  if (issueLookup === undefined) return body;
+  return <IssueLookupContext.Provider value={issueLookup}>{body}</IssueLookupContext.Provider>;
 }

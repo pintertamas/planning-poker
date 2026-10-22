@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MAX_TICKETS, type Ticket } from "@shared/types";
+import { MAX_TICKETS, type ClientAction, type Ticket, type TicketEntry } from "@shared/types";
 import { useLinear } from "../../app/linearContext";
 import { useRoomApi } from "../../net/api";
 import { parseRefs } from "../../linear/parseRefs";
@@ -19,9 +19,35 @@ import {
 } from "./ticketHelpers";
 import { ProjectCombobox } from "./ProjectCombobox";
 import { arrangeViews } from "./viewList";
+import { unresolvedIdentifiers } from "./issueLinks";
 
 type Tab = "views" | "project" | "paste" | "search";
 type Listing = { gen: number; tickets: Ticket[]; nextCursor: string | null };
+
+function requestReferences(
+  service: LinearService,
+  prepared: Ticket[],
+  entries: TicketEntry[],
+  references: Record<string, Ticket>,
+  send: (action: ClientAction) => void,
+): void {
+  const known = new Set<string>([
+    ...entries.map((entry) => entry.ticket.identifier.toUpperCase()),
+    ...prepared.map((ticket) => ticket.identifier.toUpperCase()),
+    ...Object.keys(references),
+  ]);
+  const identifiers = unresolvedIdentifiers(
+    prepared.map((ticket) => ticket.description),
+    known,
+  );
+  if (identifiers.length === 0) return;
+  service.issuesByRefs(identifiers).then(
+    ({ tickets }) => {
+      if (tickets.length > 0) send({ type: "addReferences", tickets });
+    },
+    () => undefined,
+  );
+}
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "views", label: "Views" },
@@ -630,6 +656,7 @@ function ImportBody({ onDone }: { onDone: () => void }) {
     }
     const prepared = fresh.map((ticket) => ({ ...ticket, description: trimDescription(ticket.description) }));
     send({ type: "addTickets", tickets: prepared });
+    if (service) requestReferences(service, prepared, entries, state?.references ?? {}, send);
     toast(importMessage(prepared.length, alreadyIn), "success");
     onDone();
   }
