@@ -53,6 +53,23 @@ describe("issue link chips", () => {
     expect(markup).toContain("Restrict cancelling approved payments");
   });
 
+  it("turns issue links into chips inside plain and nested bullets", () => {
+    const markup = html(
+      `- Blocked by [CTTP-1234](${ISSUE})\n  - see https://linear.app/marshmallow/issue/cttp-9/x`,
+      (identifier) => (identifier === "CTTP-1234" ? known : null),
+    );
+    expect(markup).toContain(`<li>Blocked by <a class="tk-issue-chip" href="${ISSUE}"`);
+    expect(markup).toContain('<span class="tk-issue-chip-title">Restrict cancelling approved payments</span>');
+    expect(markup).toContain('<li>see <a class="tk-issue-chip" href="https://linear.app/marshmallow/issue/cttp-9/x"');
+    expect(markup).toContain('<strong class="tk-issue-chip-id">CTTP-9</strong>');
+  });
+
+  it("turns an angle-bracket issue link inside a bullet into a chip", () => {
+    const markup = html(`* Blocked by [CTTP-1234](<${ISSUE}>)`);
+    expect(markup).toContain(`<li>Blocked by <a class="tk-issue-chip" href="${ISSUE}"`);
+    expect(markup).toContain('<strong class="tk-issue-chip-id">CTTP-1234</strong>');
+  });
+
   it("turns bare Linear URLs into chips too", () => {
     const markup = html("see https://linear.app/marshmallow/issue/cttp-9/x.");
     expect(markup).toContain('<strong class="tk-issue-chip-id">CTTP-9</strong>');
