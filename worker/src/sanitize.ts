@@ -1,5 +1,5 @@
-import { MAX_REFERENCES, MAX_TICKETS } from "@shared/types";
-import type { ClientAction, Estimate, Ticket, TicketSync } from "@shared/types";
+import { COFFEE, MAX_REFERENCES, MAX_TICKETS } from "@shared/types";
+import type { CardValue, ClientAction, Estimate, Ticket, TicketSync } from "@shared/types";
 
 const TICKET_SYNC_VALUES: readonly unknown[] = ["none", "pending", "syncing", "synced", "failed"];
 const MAX_LABELS = 20;
@@ -124,8 +124,8 @@ export function sanitizeAction(action: unknown): ClientAction | null {
       return typeof action.name === "string" ? { type: "rename", name: action.name } : null;
     }
     case "vote": {
-      return typeof action.value === "number"
-        ? { type: "vote", value: action.value as Estimate }
+      return typeof action.value === "number" || action.value === COFFEE
+        ? { type: "vote", value: action.value as CardValue }
         : null;
     }
     case "addTickets": {
