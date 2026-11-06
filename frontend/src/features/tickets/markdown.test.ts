@@ -250,6 +250,17 @@ describe("parseInline", () => {
     ]);
   });
 
+  it("accepts angle-bracket link destinations with a query and a fragment", () => {
+    const url = "https://app.example.com/p/doc?source=copy_link#abc123";
+    expect(parseInline(`[${url}](<${url}>)`)).toEqual([{ type: "link", href: url, label: url }]);
+  });
+
+  it("keeps angle-bracket destinations with other schemes as plain text", () => {
+    const nodes = parseInline("[click](<javascript:alert(1)>)");
+    expect(nodes.some((node) => node.type === "link")).toBe(false);
+    expect(nodes[0]).toEqual({ type: "text", value: "click" });
+  });
+
   it("renders links with other schemes as plain text", () => {
     const nodes = parseInline("[click](javascript:alert(1))");
     expect(nodes.some((node) => node.type === "link")).toBe(false);
@@ -305,6 +316,32 @@ describe("renderMarkdown", () => {
     expect(html("[docs](https://example.com)")).toContain(
       '<a href="https://example.com" target="_blank" rel="noopener noreferrer">docs</a>',
     );
+  });
+
+  it("renders an angle-bracket link inside a bullet as a link", () => {
+    const url = "https://app.example.com/p/doc?source=copy_link#abc123";
+    expect(html(`* Templates can be found here: [${url}](<${url}>)`)).toContain(
+      `<li>Templates can be found here: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></li>`,
+    );
+  });
+
+  it("renders an angle-bracket link outside a list as a link", () => {
+    const url = "https://app.example.com/p/doc?source=copy_link#abc123";
+    expect(html(`Templates can be found here: [${url}](<${url}>)`)).toContain(
+      `<p>Templates can be found here: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>`,
+    );
+  });
+
+  it("renders markdown links and bare URLs in plain, nested and ordered bullets", () => {
+    const markup = html(
+      "- [docs](https://example.com/a)\n  - [more](https://example.com/b)\n    - see https://example.com/c.\n1. [third](https://example.com/d)",
+    );
+    expect(markup).toContain('<li><a href="https://example.com/a" target="_blank" rel="noopener noreferrer">docs</a><ul>');
+    expect(markup).toContain('<li><a href="https://example.com/b" target="_blank" rel="noopener noreferrer">more</a><ul>');
+    expect(markup).toContain(
+      '<li>see <a href="https://example.com/c" target="_blank" rel="noopener noreferrer">https://example.com/c</a>.</li>',
+    );
+    expect(markup).toContain('<ol start="1"><li><a href="https://example.com/d" target="_blank" rel="noopener noreferrer">third</a></li></ol>');
   });
 
   it("keeps script tags inert text", () => {
