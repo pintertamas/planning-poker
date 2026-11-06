@@ -14,7 +14,7 @@ import {
   useToast,
 } from "../../ui";
 import { ConnectLinearModal } from "../ConnectLinearModal";
-import { createHostSecret, generateRoomCode, getName, markCreating, markDemo, setName } from "../identity";
+import { createHostSecret, generateRoomCode, getName, markCreating, markDemo, markQuick, setName } from "../identity";
 import { LinearProvider, useLinear } from "../linearContext";
 import { navigate } from "../router";
 
@@ -54,6 +54,7 @@ function LandingContent() {
   const resumed = useRef(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [quick, setQuick] = useState(false);
 
   useEffect(() => {
     writePendingCreate(false);
@@ -71,15 +72,20 @@ function LandingContent() {
     openRoom(false);
   }, [pendingCreate, mode]);
 
-  function openRoom(demo: boolean) {
+  function openRoom(demo: boolean, quickRoom = false) {
     const code = generateRoomCode();
     createHostSecret(code);
     markCreating(code);
     if (demo) markDemo(code);
+    if (quickRoom) markQuick(code);
     navigate(`/r/${code}`);
   }
 
   function handleCreate() {
+    if (quick) {
+      openRoom(false, true);
+      return;
+    }
     if (mode !== "none") {
       openRoom(false);
       return;
@@ -188,21 +194,35 @@ function LandingContent() {
             <div className="pp-hero-grid">
               <div className="pp-hero-block">
                 <span className="pp-field-label">Start a session</span>
-                <PillButton size="lg" icon="plus" onClick={handleCreate} disabled={!oauthAvailable && mode === "none"}>
-                  Create room
-                </PillButton>
-                {connected && (
+                <div className="pp-hero-create">
+                  <PillButton
+                    size="lg"
+                    icon="plus"
+                    onClick={handleCreate}
+                    disabled={!quick && !oauthAvailable && mode === "none"}
+                  >
+                    Create room
+                  </PillButton>
+                  <label className="pp-check">
+                    <input type="checkbox" checked={quick} onChange={(event) => setQuick(event.target.checked)} />
+                    <span>Quick room</span>
+                  </label>
+                </div>
+                {quick && (
+                  <p className="pp-hero-status pp-muted">Timer and voting only. No tickets and no Linear sign-in.</p>
+                )}
+                {!quick && connected && (
                   <p className="pp-hero-status pp-hero-status--ok">
                     <Icon name="check" size={16} />
                     Signed in with Linear
                   </p>
                 )}
-                {!connected && oauthAvailable && (
+                {!quick && !connected && oauthAvailable && (
                   <p className="pp-hero-status pp-muted">
                     You will sign in with Linear first. Your teammates only need the link.
                   </p>
                 )}
-                {!connected && !oauthAvailable && (
+                {!quick && !connected && !oauthAvailable && (
                   <p className="pp-hero-status pp-muted">Linear sign-in is not set up yet. You can still try the demo.</p>
                 )}
               </div>

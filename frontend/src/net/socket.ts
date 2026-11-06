@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerErrorCode, ServerMessage } from "@shared/protocol";
-import type { ClientAction, RoomState } from "@shared/types";
+import type { ClientAction, RoomMode, RoomState } from "@shared/types";
 import type { ConnectionStatus, Me } from "./api";
 
 export type WebSocketLike = Pick<
@@ -22,6 +22,7 @@ export type RoomSocketOptions = {
   name: string;
   hostSecret?: string;
   create?: boolean;
+  mode?: RoomMode;
   createSocket?: (url: string) => WebSocketLike;
   onSnapshot: (snap: Snapshot) => void;
   onCreateSettled?: () => void;
@@ -41,6 +42,7 @@ export class RoomSocket {
   private readonly playerId: string;
   private readonly hostSecret: string | undefined;
   private create: boolean;
+  private readonly mode: RoomMode | undefined;
   private readonly createSocket: (url: string) => WebSocketLike;
   private readonly onSnapshot: (snap: Snapshot) => void;
   private readonly onCreateSettled: () => void;
@@ -69,6 +71,7 @@ export class RoomSocket {
     this.name = opts.name;
     this.hostSecret = opts.hostSecret;
     this.create = opts.create === true;
+    this.mode = opts.mode;
     this.createSocket = opts.createSocket ?? ((url) => new WebSocket(url));
     this.onSnapshot = opts.onSnapshot;
     this.onCreateSettled = opts.onCreateSettled ?? (() => undefined);
@@ -228,7 +231,7 @@ export class RoomSocket {
 
   private hello(): ClientMessage {
     const base = { t: "hello" as const, playerId: this.playerId, name: this.name, hostSecret: this.hostSecret };
-    return this.create && this.hostSecret !== undefined ? { ...base, create: true } : base;
+    return this.create && this.hostSecret !== undefined ? { ...base, create: true, mode: this.mode } : base;
   }
 
   private settleCreate(): void {

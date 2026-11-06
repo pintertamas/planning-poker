@@ -8,7 +8,7 @@ import { Seats } from "./Seats";
 import { TimerRing } from "./TimerRing";
 import { useCountdown } from "./useCountdown";
 import { useRevealTransition } from "./useRevealTransition";
-import { currentEntry, estimateFromKey, roundKey } from "./round";
+import { estimateFromKey, hasVotingTarget, roundKey } from "./round";
 import "./table.css";
 
 type Send = RoomApi["send"];
@@ -49,7 +49,6 @@ function TableBody({
   send: Send;
 }) {
   const { round, settings, players } = state;
-  const entry = currentEntry(state);
   const key = roundKey(state);
   const live = round.phase === "voting";
   const remaining = useCountdown(round.endsAt, clockOffsetMs, live);
@@ -79,7 +78,7 @@ function TableBody({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [live, vote]);
 
-  if (entry === null) {
+  if (!hasVotingTarget(state)) {
     return (
       <div className="pp-table-empty">
         <p className="pp-table-empty-title">Import tickets to start</p>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRoomApi, type RoomApi } from "../../net/api";
 import { RoomProvider } from "../../net/RoomProvider";
-import { clearCreating, forgetHost, getHostSecret, getName, getPlayerId, isCreating, isDemo } from "../identity";
+import { clearCreating, forgetHost, getHostSecret, getName, getPlayerId, isCreating, isDemo, isQuick } from "../identity";
 import { JoinScreen } from "./JoinScreen";
 import { SessionEndedScreen } from "./SessionEndedScreen";
 import { LinearProvider } from "../linearContext";
@@ -69,6 +69,7 @@ export function RoomPage({ code }: { code: string }) {
   const [playerId] = useState(() => getPlayerId());
   const [hostSecret] = useState(() => getHostSecret(code) ?? undefined);
   const [demo] = useState(() => isDemo(code));
+  const [quick] = useState(() => isQuick(code));
   const [creating, setCreating] = useState(() => isCreating(code));
   const [rejection, setRejection] = useState<{ rejectedName: string } | null>(null);
   const [joinError, setJoinError] = useState<string | undefined>(undefined);
@@ -109,6 +110,7 @@ export function RoomPage({ code }: { code: string }) {
         name={name}
         hostSecret={hostSecret}
         create={creating}
+        mode={quick ? "quick" : "standard"}
         onCreateSettled={settleCreate}
       >
         <JoinGate code={code} name={name} joinError={joinError} onNameTaken={rejectName}>

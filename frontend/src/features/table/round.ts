@@ -9,6 +9,10 @@ export function currentEntry(state: RoomState): TicketEntry | null {
   return state.tickets.find((entry) => entry.ticket.id === state.currentTicketId) ?? null;
 }
 
+export function hasVotingTarget(state: RoomState): boolean {
+  return state.mode === "quick" || currentEntry(state) !== null;
+}
+
 export function roundKey(state: RoomState): string {
   return [state.currentTicketId ?? "none", state.round.phase, state.round.endsAt ?? "none"].join("|");
 }

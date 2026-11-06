@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Player, RoomState, Ticket, TicketEntry } from "@shared/types";
-import { currentEntry, estimateFromKey, roundKey, votersByEstimate } from "./round";
+import { currentEntry, estimateFromKey, hasVotingTarget, roundKey, votersByEstimate } from "./round";
 
 const ticket = (id: string): Ticket => ({
   id,
@@ -30,6 +30,7 @@ const room = (overrides: Partial<RoomState> = {}): RoomState => ({
   round: { phase: "idle", durationSec: 60, endsAt: null, voted: {}, votes: null },
   settings: { durationSec: 60, autoRevealWhenAllVoted: false },
   manualOrder: false,
+  mode: "standard",
   serverNow: 0,
   ...overrides,
 });
@@ -45,6 +46,20 @@ describe("currentEntry", () => {
 
   it("is null when the current id is not in the list", () => {
     expect(currentEntry(room({ currentTicketId: "missing" }))).toBeNull();
+  });
+});
+
+describe("hasVotingTarget", () => {
+  it("is true for a standard room with a current ticket", () => {
+    expect(hasVotingTarget(room({ currentTicketId: "1" }))).toBe(true);
+  });
+
+  it("is false for a standard room without a current ticket", () => {
+    expect(hasVotingTarget(room({ currentTicketId: null }))).toBe(false);
+  });
+
+  it("is true for a quick room even when no ticket exists", () => {
+    expect(hasVotingTarget(room({ mode: "quick", tickets: [], currentTicketId: null }))).toBe(true);
   });
 });
 

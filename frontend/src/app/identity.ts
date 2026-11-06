@@ -96,6 +96,14 @@ export function isDemo(code: string): boolean {
   return read("session", `pp.demo.${code}`) === "1";
 }
 
+export function markQuick(code: string): void {
+  write("session", `pp.quick.${code}`, "1");
+}
+
+export function isQuick(code: string): boolean {
+  return read("session", `pp.quick.${code}`) === "1";
+}
+
 export function isDemoGuideDismissed(code: string): boolean {
   return read("session", `pp.demoGuide.${code}`) === "1";
 }
