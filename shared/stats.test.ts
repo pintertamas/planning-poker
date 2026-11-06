@@ -129,4 +129,17 @@ describe("summarize", () => {
   it("does not let coffee shift the median", () => {
     expect(summarize({ a: 1, b: COFFEE, c: 8 }).median).toBe(4.5);
   });
+
+  it("does not count a single numeric vote beside coffee as consensus", () => {
+    const summary = summarize({ a: 3, b: COFFEE });
+    expect(summary.voters).toBe(1);
+    expect(summary.average).toBe(3);
+    expect(summary.consensus).toBe(false);
+  });
+
+  it("keeps coffee out of the mode even when coffee is the most common card", () => {
+    const summary = summarize({ a: COFFEE, b: COFFEE, c: 5 });
+    expect(summary.mode).toBe(5);
+    expect(summary.suggested).toBe(5);
+  });
 });
