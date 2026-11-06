@@ -14,6 +14,7 @@ import {
 } from "./types";
 import type {
   Actor,
+  CardValue,
   ClientAction,
   Estimate,
   ReduceResult,
@@ -345,6 +346,30 @@ describe("vote", () => {
     const result = reduce(room, { type: "vote", value: 4 as unknown as Estimate }, as("a"), T0);
     expect(result.error).toBe("bad_request");
     expect(result.room).toBe(room);
+  });
+
+  it("returns bad_request for a card value that is neither an estimate nor coffee", () => {
+    const room = votingRoom();
+    const result = reduce(room, { type: "vote", value: "cup" as unknown as CardValue }, as("a"), T0);
+    expect(result.error).toBe("bad_request");
+    expect(result.room).toBe(room);
+  });
+
+  it("stores a coffee vote as a vote without exposing it while voting", () => {
+    const room = act(votingRoom(), { type: "vote", value: COFFEE }, as("a"), T0 + 1000);
+    expect(room.round.votes).toEqual({ a: COFFEE });
+    const pub = toPublicState(room, T0 + 1000);
+    expect(pub.round.voted).toEqual({ h: false, a: true, b: false });
+    expect(pub.round.votes).toBeNull();
+  });
+
+  it("auto-reveals once everyone has voted, coffee included", () => {
+    let room = act(votingRoom(), { type: "vote", value: COFFEE }, as("a"));
+    room = act(room, { type: "vote", value: 8 }, HOST);
+    expect(room.round.phase).toBe("voting");
+    room = act(room, { type: "vote", value: 5 }, as("b"), T0 + 2000);
+    expect(room.round.phase).toBe("revealed");
+    expect(room.round.revealed).toEqual({ h: 8, a: COFFEE, b: 5 });
   });
 
   it("returns not_found when the actor is not a known player", () => {
@@ -687,6 +712,13 @@ describe("accept", () => {
     expect(result.error).toBe("bad_request");
     expect(result.room).toBe(room);
   });
+
+  it("returns bad_request when coffee is accepted as the final estimate", () => {
+    const room = revealedRoom();
+    const result = reduce(room, { type: "accept", estimate: COFFEE as unknown as Estimate }, HOST, T0);
+    expect(result.error).toBe("bad_request");
+    expect(result.room).toBe(room);
+  });
 });
 
 describe("setCurrent", () => {
@@ -967,10 +999,17 @@ describe("toPublicState", () => {
     expect(pub.round.voted.h).toBe(true);
   });
 
-  it("does not count coffee as having voted after reveal", () => {
+  it("does not count a non-voter's filled coffee as voted after reveal", () => {
     const room = act(votingRoom(), { type: "reveal" });
     const pub = toPublicState(room, T0);
     expect(pub.round.voted).toEqual({ h: false, a: false, b: false });
+    expect(pub.round.votes).toEqual({ h: COFFEE, a: COFFEE, b: COFFEE });
+  });
+
+  it("counts a coffee vote as voted after reveal", () => {
+    const room = act(act(votingRoom(), { type: "vote", value: COFFEE }, as("a")), { type: "reveal" });
+    const pub = toPublicState(room, T0);
+    expect(pub.round.voted).toEqual({ h: false, a: true, b: false });
     expect(pub.round.votes).toEqual({ h: COFFEE, a: COFFEE, b: COFFEE });
   });
 });

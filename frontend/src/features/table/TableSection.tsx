@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Estimate, RoomState } from "@shared/types";
+import type { CardValue, RoomState } from "@shared/types";
 import { SectionCard } from "../../ui";
 import { useRoomApi, type Me, type RoomApi } from "../../net/api";
 import { CardDeck } from "./CardDeck";
@@ -53,13 +53,13 @@ function TableBody({
   const key = roundKey(state);
   const live = round.phase === "voting";
   const remaining = useCountdown(round.endsAt, clockOffsetMs, live);
-  const [pick, setPick] = useState<{ key: string; value: Estimate } | null>(null);
+  const [pick, setPick] = useState<{ key: string; value: CardValue } | null>(null);
   const selected = pick !== null && pick.key === key ? pick.value : null;
   const isHost = me?.isHost === true;
   const revealing = useRevealTransition(round.phase, state.currentTicketId);
 
   const vote = useCallback(
-    (value: Estimate) => {
+    (value: CardValue) => {
       setPick({ key, value });
       send({ type: "vote", value });
     },
