@@ -13,7 +13,7 @@ import { departPlayers, departedPlayerIds, isStale, nextWakeAt, staleSocketIndex
 import type { Env } from "./env";
 import { ROOM_CODE_HEADER } from "./env";
 import { sanitizeAction } from "./sanitize";
-import { canCreateRoom } from "./roomCreation";
+import { canCreateRoom, parseRoomMode } from "./roomCreation";
 
 const MAX_MESSAGE_CHARS = 900000;
 const MAX_HOST_SECRET_CHARS = 128;
@@ -167,6 +167,11 @@ export class RoomDO extends DurableObject<Env> {
       this.sendError(ws, "bad_request", "Invalid host secret");
       return;
     }
+    const mode = parseRoomMode(data.mode);
+    if (mode === null) {
+      this.sendError(ws, "bad_request", "Invalid room mode");
+      return;
+    }
     const now = Date.now();
     let room = await this.loadRoom();
     if (room === null) {
@@ -180,7 +185,7 @@ export class RoomDO extends DurableObject<Env> {
         this.rejectClosed(ws);
         return;
       }
-      room = createRoom(code, now);
+      room = createRoom(code, now, mode);
     }
 
     let isHost = false;

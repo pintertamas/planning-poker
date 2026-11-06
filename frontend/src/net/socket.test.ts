@@ -48,6 +48,7 @@ const STATE: RoomState = {
   round: { phase: "idle", durationSec: 60, endsAt: null, voted: {}, votes: null },
   settings: { durationSec: 60, autoRevealWhenAllVoted: false },
   manualOrder: false,
+  mode: "standard",
   serverNow: 1_000,
 };
 
@@ -227,6 +228,24 @@ describe("RoomSocket", () => {
     sock.connect();
     fake().open();
     expect(fake().sent).toEqual([{ t: "hello", playerId: "p1", name: "Ann", hostSecret: "s3cret", create: true }]);
+  });
+
+  it("sends the requested room mode along with create", () => {
+    const sock = new RoomSocket({
+      url: "ws://test/ws/abc123",
+      playerId: "p1",
+      name: "Ann",
+      hostSecret: "s3cret",
+      create: true,
+      mode: "quick",
+      createSocket: (url) => new FakeWebSocket(url),
+      onSnapshot: () => undefined,
+    });
+    sock.connect();
+    fake().open();
+    expect(fake().sent).toEqual([
+      { t: "hello", playerId: "p1", name: "Ann", hostSecret: "s3cret", create: true, mode: "quick" },
+    ]);
   });
 
   it("omits create from the hello when it was not requested", () => {

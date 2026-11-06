@@ -1,7 +1,7 @@
-import type { ClientAction, RoomState } from "./types";
+import type { ClientAction, RoomMode, RoomState } from "./types";
 
 export type ClientMessage =
-  | { t: "hello"; playerId: string; name: string; hostSecret?: string; create?: boolean }
+  | { t: "hello"; playerId: string; name: string; hostSecret?: string; create?: boolean; mode?: RoomMode }
   | { t: "act"; action: ClientAction }
   | { t: "ping"; clientTime: number };
 

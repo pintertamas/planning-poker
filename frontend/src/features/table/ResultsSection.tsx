@@ -7,7 +7,7 @@ import { cx } from "../../ui/cx";
 import { useRoomApi, type RoomApi } from "../../net/api";
 import { DistributionBars } from "./DistributionBars";
 import { prefersReducedMotion, scrollBehavior } from "./motion";
-import { currentEntry, roundKey, votersByEstimate } from "./round";
+import { currentEntry, hasVotingTarget, roundKey, votersByEstimate } from "./round";
 import { useCountUp } from "./useCountUp";
 import { useRevealTransition } from "./useRevealTransition";
 import "./table.css";
@@ -65,17 +65,19 @@ function ResultsBody({ state, isHost, send }: { state: RoomState; isHost: boolea
     return undefined;
   }, [animate]);
 
-  if (entry === null) {
+  if (!hasVotingTarget(state)) {
     return <p className="pp-muted">No ticket is selected.</p>;
   }
 
   return (
     <div ref={panel} className={cx("pp-results", animate && "is-entering")}>
       <div className="pp-results-head">
-        <div className="pp-results-ticket">
-          <span className="pp-results-id">{entry.ticket.identifier}</span>
-          <h3 className="pp-results-title">{entry.ticket.title}</h3>
-        </div>
+        {entry !== null && (
+          <div className="pp-results-ticket">
+            <span className="pp-results-id">{entry.ticket.identifier}</span>
+            <h3 className="pp-results-title">{entry.ticket.title}</h3>
+          </div>
+        )}
         {revealed && summary.consensus && <Chip tone="green">Consensus</Chip>}
       </div>
 
@@ -102,41 +104,43 @@ function ResultsBody({ state, isHost, send }: { state: RoomState; isHost: boolea
             </LabelValue>
           </div>
 
-          <div className="pp-accept">
-            {isHost ? (
-              <>
-                <span className="pp-field-label">Final estimate</span>
-                <div className="pp-estimate-row" role="group" aria-label="Final estimate">
-                  {ALLOWED_ESTIMATES.map((value) => (
+          {entry !== null && (
+            <div className="pp-accept">
+              {isHost ? (
+                <>
+                  <span className="pp-field-label">Final estimate</span>
+                  <div className="pp-estimate-row" role="group" aria-label="Final estimate">
+                    {ALLOWED_ESTIMATES.map((value) => (
+                      <PillButton
+                        key={value}
+                        size="sm"
+                        variant={chosen === value ? "primary" : "secondary"}
+                        aria-pressed={chosen === value}
+                        onClick={() => setPick({ key, value })}
+                      >
+                        {value}
+                      </PillButton>
+                    ))}
+                  </div>
+                  <div>
                     <PillButton
-                      key={value}
-                      size="sm"
-                      variant={chosen === value ? "primary" : "secondary"}
-                      aria-pressed={chosen === value}
-                      onClick={() => setPick({ key, value })}
+                      disabled={chosen === null}
+                      onClick={() => {
+                        if (chosen !== null) send({ type: "accept", estimate: chosen });
+                      }}
                     >
-                      {value}
+                      Accept & next
                     </PillButton>
-                  ))}
+                  </div>
+                </>
+              ) : (
+                <div className="pp-accept-wait">
+                  <p className="pp-muted">Waiting for the host to accept an estimate</p>
+                  {summary.suggested !== null && <Chip tone="pink">Suggested {summary.suggested}</Chip>}
                 </div>
-                <div>
-                  <PillButton
-                    disabled={chosen === null}
-                    onClick={() => {
-                      if (chosen !== null) send({ type: "accept", estimate: chosen });
-                    }}
-                  >
-                    Accept & next
-                  </PillButton>
-                </div>
-              </>
-            ) : (
-              <div className="pp-accept-wait">
-                <p className="pp-muted">Waiting for the host to accept an estimate</p>
-                {summary.suggested !== null && <Chip tone="pink">Suggested {summary.suggested}</Chip>}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

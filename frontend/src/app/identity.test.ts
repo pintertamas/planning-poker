@@ -7,8 +7,10 @@ import {
   isCreating,
   isDemo,
   isDemoGuideDismissed,
+  isQuick,
   markCreating,
   markDemo,
+  markQuick,
   createHostSecret,
 } from "./identity";
 
@@ -63,6 +65,17 @@ describe("creating flag", () => {
   it("only affects its own room code", () => {
     markCreating("cr3ate3");
     expect(isCreating("cr3ate4")).toBe(false);
+  });
+});
+
+describe("quick room flag", () => {
+  it("is false until marked for that room code, and lives in sessionStorage", () => {
+    expect(isQuick("qu1ck01")).toBe(false);
+    markQuick("qu1ck01");
+    expect(isQuick("qu1ck01")).toBe(true);
+    expect(session.getItem("pp.quick.qu1ck01")).toBe("1");
+    expect(local.has("pp.quick.qu1ck01")).toBe(false);
+    expect(isQuick("qu1ck02")).toBe(false);
   });
 });
 

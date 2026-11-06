@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { ClientAction } from "@shared/types";
+import type { ClientAction, RoomMode } from "@shared/types";
 import { RoomContext, type RoomApi } from "./api";
 import { wsUrl } from "./config";
 import { RoomSocket, type Snapshot } from "./socket";
@@ -10,6 +10,7 @@ type RoomProviderProps = {
   name: string;
   hostSecret?: string;
   create?: boolean;
+  mode?: RoomMode;
   onCreateSettled?: () => void;
   children: ReactNode;
 };
@@ -23,7 +24,16 @@ const INITIAL: Snapshot = {
   errorCode: null,
 };
 
-export function RoomProvider({ code, playerId, name, hostSecret, create, onCreateSettled, children }: RoomProviderProps) {
+export function RoomProvider({
+  code,
+  playerId,
+  name,
+  hostSecret,
+  create,
+  mode,
+  onCreateSettled,
+  children,
+}: RoomProviderProps) {
   const [snap, setSnap] = useState<Snapshot>(INITIAL);
   const socketRef = useRef<RoomSocket | null>(null);
 
@@ -35,6 +45,7 @@ export function RoomProvider({ code, playerId, name, hostSecret, create, onCreat
       name,
       hostSecret,
       create,
+      mode,
       onSnapshot: (next) => {
         if (active) setSnap(next);
       },

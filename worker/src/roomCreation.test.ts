@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { canCreateRoom } from "./roomCreation";
+import { canCreateRoom, parseRoomMode } from "./roomCreation";
+
+describe("parseRoomMode", () => {
+  it("defaults to standard when no mode is sent", () => {
+    expect(parseRoomMode(undefined)).toBe("standard");
+  });
+
+  it("accepts standard and quick", () => {
+    expect(parseRoomMode("standard")).toBe("standard");
+    expect(parseRoomMode("quick")).toBe("quick");
+  });
+
+  it("rejects anything else, including null, other casings and non-strings", () => {
+    for (const value of [null, "", "QUICK", "Quick", "quick ", "tickets", 1, true, {}, ["quick"]]) {
+      expect(parseRoomMode(value)).toBeNull();
+    }
+  });
+});
 
 describe("canCreateRoom", () => {
   it("allows creating a missing room when the hello carries a host secret and create is requested", () => {
