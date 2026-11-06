@@ -99,7 +99,13 @@ function TableBody({
         />
         <div className="pp-table-controls">
           {isHost ? (
-            <HostControls phase={round.phase} settings={settings} send={send} />
+            <HostControls
+              phase={round.phase}
+              settings={settings}
+              send={send}
+              tickets={state.tickets}
+              currentTicketId={state.currentTicketId}
+            />
           ) : (
             <p className="pp-table-status" role="status">
               {STATUS_LINE[round.phase]}
