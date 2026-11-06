@@ -35,9 +35,13 @@ const QUOTE = /^\s*>\s?(.*)$/;
 const BULLET = /^\s*[-*]\s+(.*)$/;
 const NUMBERED = /^\s*(\d+)\.\s+(.*)$/;
 const INLINE =
-  /`([^`\n]+)`|!\[([^\]\n]*)\]\(([^)\s]+)\)|\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^\n]+?)\*\*|\*([^*\s][^*\n]*?)\*|https:\/\/[^\s<>]+/g;
+  /`([^`\n]+)`|!\[([^\]\n]*)\]\(([^)\s]+)\)|\[([^\]\n]+)\]\((<[^>\n]+>|[^)\s]+)\)|\*\*([^\n]+?)\*\*|\*([^*\s][^*\n]*?)\*|https:\/\/[^\s<>]+/g;
 const URL_TRAILING_PUNCTUATION = /[.,;:!?)\]'"]+$/;
 const HTTPS_PREFIX = "https://";
+
+function unwrapDestination(destination: string): string {
+  return destination.startsWith("<") && destination.endsWith(">") ? destination.slice(1, -1) : destination;
+}
 
 export function parseInline(source: string): Inline[] {
   const nodes: Inline[] = [];
@@ -61,7 +65,8 @@ export function parseInline(source: string): Inline[] {
         ? { type: "image", href: match[3], alt: match[2] }
         : { type: "text", value: match[2].trim() || "Image" };
     } else if (match[4] !== undefined && match[5] !== undefined) {
-      token = isHttpUrl(match[5]) ? { type: "link", href: match[5], label: match[4] } : { type: "text", value: match[4] };
+      const href = unwrapDestination(match[5]);
+      token = isHttpUrl(href) ? { type: "link", href, label: match[4] } : { type: "text", value: match[4] };
     } else if (match[6] !== undefined) {
       token = { type: "strong", children: parseInline(match[6]) };
     } else if (match[7] !== undefined) {
