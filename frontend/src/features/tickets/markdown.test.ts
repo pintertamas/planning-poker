@@ -336,8 +336,8 @@ describe("renderMarkdown", () => {
     const markup = html(
       "- [docs](https://example.com/a)\n  - [more](https://example.com/b)\n    - see https://example.com/c.\n1. [third](https://example.com/d)",
     );
-    expect(markup).toContain('<li><a href="https://example.com/a" target="_blank" rel="noopener noreferrer">docs</a></li>');
-    expect(markup).toContain('<li><a href="https://example.com/b" target="_blank" rel="noopener noreferrer">more</a></li>');
+    expect(markup).toContain('<li><a href="https://example.com/a" target="_blank" rel="noopener noreferrer">docs</a><ul>');
+    expect(markup).toContain('<li><a href="https://example.com/b" target="_blank" rel="noopener noreferrer">more</a><ul>');
     expect(markup).toContain(
       '<li>see <a href="https://example.com/c" target="_blank" rel="noopener noreferrer">https://example.com/c</a>.</li>',
     );
