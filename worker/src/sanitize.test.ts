@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeAction } from "./sanitize";
-import { MAX_REFERENCES, MAX_TICKETS } from "@shared/types";
+import { COFFEE, MAX_REFERENCES, MAX_TICKETS } from "@shared/types";
 
 const validTicket = {
   id: "uuid-1",
@@ -43,11 +43,15 @@ describe("sanitizeAction", () => {
     expect(sanitizeAction({ type: "rename" })).toBeNull();
   });
 
-  it("validates vote and accept as numbers", () => {
+  it("validates vote as a number or coffee and accept as a number only", () => {
     expect(sanitizeAction({ type: "vote", value: 3 })).toEqual({ type: "vote", value: 3 });
+    expect(sanitizeAction({ type: "vote", value: COFFEE })).toEqual({ type: "vote", value: COFFEE });
     expect(sanitizeAction({ type: "vote", value: "3" })).toBeNull();
+    expect(sanitizeAction({ type: "vote", value: "Coffee" })).toBeNull();
+    expect(sanitizeAction({ type: "vote", value: null })).toBeNull();
     expect(sanitizeAction({ type: "accept", estimate: 8 })).toEqual({ type: "accept", estimate: 8 });
     expect(sanitizeAction({ type: "accept", estimate: null })).toBeNull();
+    expect(sanitizeAction({ type: "accept", estimate: COFFEE })).toBeNull();
   });
 
   it("validates ticket id actions", () => {

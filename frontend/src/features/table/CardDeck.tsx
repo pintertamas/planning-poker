@@ -1,9 +1,11 @@
 import type { CSSProperties } from "react";
-import { ALLOWED_ESTIMATES } from "@shared/types";
-import type { Estimate, RoundPhase } from "@shared/types";
+import { ALLOWED_ESTIMATES, COFFEE } from "@shared/types";
+import type { CardValue, RoundPhase } from "@shared/types";
 import { cx } from "../../ui/cx";
 import { PlayingCard } from "./PlayingCard";
 import "./table.css";
+
+const DECK: readonly CardValue[] = [...ALLOWED_ESTIMATES, COFFEE];
 
 export function CardDeck({
   phase,
@@ -11,13 +13,13 @@ export function CardDeck({
   onVote,
 }: {
   phase: RoundPhase;
-  selected: Estimate | null;
-  onVote: (value: Estimate) => void;
+  selected: CardValue | null;
+  onVote: (value: CardValue) => void;
 }) {
   const open = phase === "voting";
   return (
     <div className="pp-deck" role="group" aria-label="Pick an estimate">
-      {ALLOWED_ESTIMATES.map((value, index) => {
+      {DECK.map((value, index) => {
         const isSelected = value === selected;
         return (
           <button
@@ -26,7 +28,7 @@ export function CardDeck({
             className={cx("pp-deck-card", isSelected && "is-selected", open && "is-dealing")}
             style={{ "--i": index } as CSSProperties}
             aria-pressed={isSelected}
-            aria-label={`Estimate ${value}`}
+            aria-label={value === COFFEE ? "Coffee" : `Estimate ${value}`}
             disabled={!open}
             onClick={() => onVote(value)}
           >
