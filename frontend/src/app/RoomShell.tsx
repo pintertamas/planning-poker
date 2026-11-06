@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { RailNav, SidePanel, PillButton } from "../ui";
 import { TicketPanel } from "../features/tickets/TicketPanel";
 import { TicketStage } from "../features/tickets/TicketStage";
@@ -11,12 +12,16 @@ import { navigate } from "./router";
 import { RoomTopBar } from "./RoomTopBar";
 import { DemoGuideCard } from "./DemoGuideCard";
 import { useRoute } from "./router";
+import { useAutoScroll } from "./useAutoScroll";
 
 export function RoomShell() {
   const { mode } = useLinear();
   const room = useRoomApi();
   const route = useRoute();
   const code = route.name === "room" ? route.code : "";
+  const ticketRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoScroll(room.state, ticketRef, tableRef);
   const quick = room.state?.mode === "quick";
 
   return (
@@ -44,9 +49,15 @@ export function RoomShell() {
             </PillButton>
           </div>
         )}
-        {!quick && <TicketStage />}
+        {!quick && (
+          <div ref={ticketRef}>
+            <TicketStage />
+          </div>
+        )}
         {!quick && <LinkedTicketModal />}
-        <TableSection />
+        <div ref={tableRef}>
+          <TableSection />
+        </div>
         <ResultsSection />
       </main>
     </div>

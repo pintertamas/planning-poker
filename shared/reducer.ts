@@ -62,6 +62,8 @@ const fail = (error: string): Outcome => ({ error });
 const isEstimate = (value: unknown): value is Estimate =>
   (ALLOWED_ESTIMATES as readonly unknown[]).includes(value);
 
+const isCardValue = (value: unknown): value is CardValue => value === COFFEE || isEstimate(value);
+
 const isTimerOption = (value: number): boolean =>
   (TIMER_OPTIONS_SEC as readonly number[]).includes(value);
 
@@ -96,7 +98,7 @@ const claimName = (room: ServerRoom, playerId: string, sanitized: string): Serve
   return removeSeats(room, new Set(holders.map((player) => player.id)));
 };
 
-const voteOf = (votes: Record<string, Estimate>, playerId: string): Estimate | undefined =>
+const voteOf = (votes: Record<string, CardValue>, playerId: string): CardValue | undefined =>
   Object.prototype.hasOwnProperty.call(votes, playerId) ? votes[playerId] : undefined;
 
 const hasPlayer = (room: ServerRoom, playerId: string): boolean =>
@@ -198,7 +200,7 @@ const rename = (room: ServerRoom, playerId: string, name: string): Outcome => {
 
 const vote = (room: ServerRoom, playerId: string, value: unknown): Outcome => {
   if (room.round.phase !== "voting") return fail("bad_state");
-  if (!isEstimate(value)) return fail("bad_request");
+  if (!isCardValue(value)) return fail("bad_request");
   if (!hasPlayer(room, playerId)) return fail("not_found");
   return ok(
     autoRevealIfComplete({
@@ -459,14 +461,8 @@ export function reduce(
   return { room: { ...outcome.room, lastActivityAt: now } };
 }
 
-const isVoted = (room: ServerRoom, playerId: string): boolean => {
-  if (room.round.phase === "voting") return voteOf(room.round.votes, playerId) !== undefined;
-  if (room.round.phase === "revealed") {
-    const value = room.round.revealed?.[playerId];
-    return value !== undefined && value !== COFFEE;
-  }
-  return false;
-};
+const isVoted = (room: ServerRoom, playerId: string): boolean =>
+  room.round.phase !== "idle" && voteOf(room.round.votes, playerId) !== undefined;
 
 export function toPublicState(stored: ServerRoom, now: number): RoomState {
   const room = normalizeRoom(stored);

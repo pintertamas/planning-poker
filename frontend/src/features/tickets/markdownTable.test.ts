@@ -111,13 +111,13 @@ describe("table detection", () => {
     expect(parseBlocks("Intro line\n| a | b |\n|---|---|\n| 1 | 2 |\n- item")).toEqual([
       { type: "paragraph", lines: ["Intro line"] },
       { type: "table", align: ["left", "left"], header: ["a", "b"], rows: [["1", "2"]] },
-      { type: "list", ordered: false, start: 1, items: ["item"] },
+      { type: "list", ordered: false, start: 1, items: [{ text: "item", children: [] }] },
     ]);
   });
 
   it("keeps a table that comes after a list item separate from the list", () => {
     expect(parseBlocks("- item\n| a |\n|---|\n| 1 |")).toEqual([
-      { type: "list", ordered: false, start: 1, items: ["item"] },
+      { type: "list", ordered: false, start: 1, items: [{ text: "item", children: [] }] },
       { type: "table", align: ["left"], header: ["a"], rows: [["1"]] },
     ]);
   });

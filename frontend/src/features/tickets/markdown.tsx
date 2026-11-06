@@ -13,14 +13,20 @@ export type Inline =
   | { type: "link"; href: string; label: string }
   | { type: "image"; href: string; alt: string };
 
+export type ListItem = { text: string; children: Block[] };
+
+export type ListBlock = { type: "list"; ordered: boolean; start: number; items: ListItem[] };
+
 export type Block =
   | { type: "heading"; level: 1 | 2 | 3; text: string }
   | { type: "paragraph"; lines: string[] }
-  | { type: "list"; ordered: boolean; start: number; items: string[] }
+  | ListBlock
   | { type: "code"; text: string }
   | { type: "quote"; blocks: Block[] }
   | { type: "rule" }
   | TableBlock;
+
+type Marker = { ordered: boolean; start: number; text: string; indent: number };
 
 const HEADING = /^(#{1,3})\s+(.*\S)\s*$/;
 const RULE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
@@ -29,9 +35,13 @@ const QUOTE = /^\s*>\s?(.*)$/;
 const BULLET = /^\s*[-*]\s+(.*)$/;
 const NUMBERED = /^\s*(\d+)\.\s+(.*)$/;
 const INLINE =
-  /`([^`\n]+)`|!\[([^\]\n]*)\]\(([^)\s]+)\)|\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^\n]+?)\*\*|\*([^*\s][^*\n]*?)\*|https:\/\/[^\s<>]+/g;
+  /`([^`\n]+)`|!\[([^\]\n]*)\]\(([^)\s]+)\)|\[([^\]\n]+)\]\((<[^>\n]+>|[^)\s]+)\)|\*\*([^\n]+?)\*\*|\*([^*\s][^*\n]*?)\*|https:\/\/[^\s<>]+/g;
 const URL_TRAILING_PUNCTUATION = /[.,;:!?)\]'"]+$/;
 const HTTPS_PREFIX = "https://";
+
+function unwrapDestination(destination: string): string {
+  return destination.startsWith("<") && destination.endsWith(">") ? destination.slice(1, -1) : destination;
+}
 
 export function parseInline(source: string): Inline[] {
   const nodes: Inline[] = [];
@@ -55,7 +65,8 @@ export function parseInline(source: string): Inline[] {
         ? { type: "image", href: match[3], alt: match[2] }
         : { type: "text", value: match[2].trim() || "Image" };
     } else if (match[4] !== undefined && match[5] !== undefined) {
-      token = isHttpUrl(match[5]) ? { type: "link", href: match[5], label: match[4] } : { type: "text", value: match[4] };
+      const href = unwrapDestination(match[5]);
+      token = isHttpUrl(href) ? { type: "link", href, label: match[4] } : { type: "text", value: match[4] };
     } else if (match[6] !== undefined) {
       token = { type: "strong", children: parseInline(match[6]) };
     } else if (match[7] !== undefined) {
@@ -77,6 +88,61 @@ export function parseInline(source: string): Inline[] {
 
   pushText(source.length);
   return nodes;
+}
+
+const indentOf = (line: string): number => line.length - line.trimStart().length;
+
+function markerOf(line: string): Marker | null {
+  if (RULE.test(line)) return null;
+  const indent = indentOf(line);
+  const numbered = NUMBERED.exec(line);
+  if (numbered) return { ordered: true, start: Number(numbered[1]), text: numbered[2] ?? "", indent };
+  const bullet = BULLET.exec(line);
+  if (bullet) return { ordered: false, start: 1, text: bullet[1] ?? "", indent };
+  return null;
+}
+
+function indentOfNextContent(lines: string[], index: number): number {
+  for (let ahead = index; ahead < lines.length; ahead += 1) {
+    const line = lines[ahead] ?? "";
+    if (line.trim() !== "") return indentOf(line);
+  }
+  return -1;
+}
+
+function dedent(lines: string[]): string[] {
+  const widths = lines.filter((line) => line.trim() !== "").map(indentOf);
+  const common = widths.length === 0 ? 0 : Math.min(...widths);
+  return lines.map((line) => (line.trim() === "" ? "" : line.slice(common)));
+}
+
+function listItem(text: string, body: string[]): ListItem {
+  const blocks = parseBlocks(dedent(body).join("\n"));
+  const [lead, ...rest] = blocks;
+  if (lead?.type === "paragraph" && (body[0] ?? "").trim() !== "") {
+    return { text: [text, ...lead.lines].filter((part) => part !== "").join(" "), children: rest };
+  }
+  return { text, children: blocks };
+}
+
+function parseList(lines: string[], start: number, first: Marker): { block: ListBlock; next: number } {
+  const items: ListItem[] = [];
+  let index = start;
+  let marker = markerOf(lines[index] ?? "");
+  while (marker !== null && marker.indent === first.indent && marker.ordered === first.ordered) {
+    index += 1;
+    const body: string[] = [];
+    while (index < lines.length) {
+      const current = lines[index] ?? "";
+      const width = current.trim() === "" ? indentOfNextContent(lines, index) : indentOf(current);
+      if (width <= first.indent) break;
+      body.push(current);
+      index += 1;
+    }
+    items.push(listItem(marker.text, body));
+    marker = markerOf(lines[index] ?? "");
+  }
+  return { block: { type: "list", ordered: first.ordered, start: first.start, items }, next: index };
 }
 
 function startsBlock(line: string): boolean {
@@ -139,30 +205,11 @@ export function parseBlocks(source: string): Block[] {
       continue;
     }
 
-    const numbered = NUMBERED.exec(line);
-    if (numbered || BULLET.test(line)) {
-      const ordered = numbered !== null;
-      const pattern = ordered ? NUMBERED : BULLET;
-      const start = numbered ? Number(numbered[1]) : 1;
-      const items: string[] = [];
-      while (index < lines.length) {
-        const current = lines[index] ?? "";
-        if (RULE.test(current)) break;
-        const item = pattern.exec(current);
-        if (item) {
-          items.push((ordered ? item[2] : item[1]) ?? "");
-          index += 1;
-          continue;
-        }
-        if (items.length > 0 && /^\s+\S/.test(current)) {
-          const last = items.length - 1;
-          items[last] = `${items[last] ?? ""} ${current.trim()}`;
-          index += 1;
-          continue;
-        }
-        break;
-      }
-      blocks.push({ type: "list", ordered, start, items });
+    const marker = markerOf(line);
+    if (marker !== null) {
+      const list = parseList(lines, index, marker);
+      blocks.push(list.block);
+      index = list.next;
       continue;
     }
 
@@ -240,9 +287,15 @@ function renderBlocks(blocks: Block[], keyPrefix: string): ReactNode[] {
           </p>
         );
       case "list": {
-        const items = block.items.map((item, itemIndex) => (
-          <li key={itemIndex}>{renderInline(parseInline(item), `${key}-${itemIndex}`)}</li>
-        ));
+        const items = block.items.map((item, itemIndex) => {
+          const itemKey = `${key}-${itemIndex}`;
+          return (
+            <li key={itemIndex}>
+              {renderInline(parseInline(item.text), itemKey)}
+              {renderBlocks(item.children, itemKey)}
+            </li>
+          );
+        });
         return block.ordered ? (
           <ol key={key} start={block.start}>
             {items}

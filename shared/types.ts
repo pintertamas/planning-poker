@@ -94,7 +94,7 @@ export type ServerRound = {
   phase: RoundPhase;
   durationSec: number;
   endsAt: number | null;
-  votes: Record<string, Estimate>;
+  votes: Record<string, CardValue>;
   revealed: Record<string, CardValue> | null;
 };
 
@@ -117,7 +117,7 @@ export type Actor = { playerId: string; isHost: boolean };
 
 export type ClientAction =
   | { type: "rename"; name: string }
-  | { type: "vote"; value: Estimate }
+  | { type: "vote"; value: CardValue }
   | { type: "addTickets"; tickets: Ticket[] }
   | { type: "addReferences"; tickets: Ticket[] }
   | { type: "removeTicket"; ticketId: string }
