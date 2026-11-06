@@ -87,6 +87,84 @@ const votingRoom = (now: number = T0): ServerRoom =>
 const statusOf = (room: ServerRoom, id: string) =>
   room.tickets.find((entry) => entry.ticket.id === id);
 
+const quickLobby = (): ServerRoom => {
+  let room = createRoom("abc123", T0, "quick");
+  room = seat(room, "h", "Host", true);
+  room = seat(room, "a", "Alice");
+  room = seat(room, "b", "Bob");
+  return room;
+};
+
+describe("quick rooms", () => {
+  it("are created in quick mode, while plain rooms default to standard", () => {
+    expect(createRoom("abc123", T0, "quick").mode).toBe("quick");
+    expect(createRoom("abc123", T0).mode).toBe("standard");
+  });
+
+  it("start a voting round without any ticket", () => {
+    const room = act(quickLobby(), { type: "startRound" });
+    expect(room.round.phase).toBe("voting");
+    expect(room.currentTicketId).toBeNull();
+    expect(room.tickets).toEqual([]);
+  });
+
+  it("reveal automatically once everyone has voted, without any ticket", () => {
+    let room = act(quickLobby(), { type: "startRound" }, HOST, T0);
+    room = act(room, { type: "vote", value: 3 }, HOST, T0 + 1);
+    room = act(room, { type: "vote", value: 3 }, as("a"), T0 + 2);
+    room = act(room, { type: "vote", value: 5 }, as("b"), T0 + 3);
+    expect(room.round.phase).toBe("revealed");
+    expect(room.round.revealed).toEqual({ h: 3, a: 3, b: 5 });
+  });
+
+  it("reveal on the host's command without any ticket", () => {
+    let room = act(quickLobby(), { type: "startRound" }, HOST, T0);
+    room = act(room, { type: "vote", value: 8 }, as("a"), T0 + 1);
+    room = act(room, { type: "reveal" }, HOST, T0 + 2);
+    expect(room.round.phase).toBe("revealed");
+    expect(room.round.revealed).toEqual({ h: COFFEE, a: 8, b: COFFEE });
+  });
+
+  it("end the round when the timer runs out, without any ticket", () => {
+    const started = act(quickLobby(), { type: "startRound" }, HOST, T0);
+    const room = act(started, { type: "tick" }, HOST, T0 + DEFAULT_TIMER_SEC * 1000);
+    expect(room.round.phase).toBe("revealed");
+  });
+
+  it("open a new round after a reveal without any ticket", () => {
+    let room = act(quickLobby(), { type: "startRound" }, HOST, T0);
+    room = act(room, { type: "reveal" }, HOST, T0 + 1);
+    room = act(room, { type: "revote" }, HOST, T0 + 2);
+    expect(room.round.phase).toBe("voting");
+    expect(room.round.votes).toEqual({});
+  });
+
+  it("refuse accepting an estimate, since there is no ticket to write it to", () => {
+    let room = act(quickLobby(), { type: "startRound" }, HOST, T0);
+    room = act(room, { type: "reveal" }, HOST, T0 + 1);
+    expect(reduce(room, { type: "accept", estimate: 3 }, HOST, T0 + 2).error).toBe("bad_state");
+  });
+
+  it.each<[string, ServerAction]>([
+    ["addTickets", { type: "addTickets", tickets: [ticket("t1")] }],
+    ["addReferences", { type: "addReferences", tickets: [ticket("r1")] }],
+    ["setCurrent", { type: "setCurrent", ticketId: "t1" }],
+    ["removeTicket", { type: "removeTicket", ticketId: "t1" }],
+    ["setSync", { type: "setSync", ticketId: "t1", sync: "pending" }],
+    ["reorderTickets", { type: "reorderTickets", ticketIds: [] }],
+    ["resetOrder", { type: "resetOrder" }],
+  ])("refuse %s", (_name, action) => {
+    const room = quickLobby();
+    const result = reduce(room, action, HOST, T0);
+    expect(result.error).toBe("bad_state");
+    expect(result.room).toBe(room);
+  });
+
+  it("expose the mode in the public state", () => {
+    expect(toPublicState(quickLobby(), T0).mode).toBe("quick");
+  });
+});
+
 describe("createRoom", () => {
   it("creates an idle room with defaults", () => {
     expect(createRoom("abc123", T0)).toEqual({
@@ -107,6 +185,7 @@ describe("createRoom", () => {
       },
       settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
       manualOrder: false,
+      mode: "standard",
     });
   });
 });
@@ -949,6 +1028,7 @@ describe("toPublicState", () => {
       round: { phase: "idle", durationSec: DEFAULT_TIMER_SEC, endsAt: null, voted: { h: false, a: false, b: false }, votes: null },
       settings: { durationSec: DEFAULT_TIMER_SEC, autoRevealWhenAllVoted: true },
       manualOrder: false,
+      mode: "standard",
       serverNow: T0 + 42,
     });
     expect(pub.players).not.toBe(room.players);

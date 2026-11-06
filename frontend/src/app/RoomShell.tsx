@@ -5,6 +5,7 @@ import { LinkedTicketModal } from "../features/tickets/LinkedTicketModal";
 import { TableSection } from "../features/table/TableSection";
 import { ResultsSection } from "../features/table/ResultsSection";
 import { useRoomApi } from "../net/api";
+import { cx } from "../ui/cx";
 import { useLinear } from "./linearContext";
 import { navigate } from "./router";
 import { RoomTopBar } from "./RoomTopBar";
@@ -16,20 +17,23 @@ export function RoomShell() {
   const room = useRoomApi();
   const route = useRoute();
   const code = route.name === "room" ? route.code : "";
+  const quick = room.state?.mode === "quick";
 
   return (
-    <div className="pp-app">
+    <div className={cx("pp-app", quick && "pp-app--no-panel")}>
       <RailNav
         items={[{ id: "room", label: "Room", icon: "room", active: true, onClick: () => undefined }]}
         bottom={[{ id: "leave", label: "Leave", icon: "signout", onClick: () => navigate("/") }]}
       />
-      <SidePanel title="Tickets">
-        <TicketPanel />
-      </SidePanel>
+      {!quick && (
+        <SidePanel title="Tickets">
+          <TicketPanel />
+        </SidePanel>
+      )}
       <main className="pp-main">
         <RoomTopBar />
         {mode === "demo" && <DemoGuideCard code={code} />}
-        {mode === "none" && room.me?.isHost && (
+        {!quick && mode === "none" && room.me?.isHost && (
           <div className="pp-alert pp-alert--notice" role="status">
             <span className="pp-alert-text">
               Your Linear sign-in is no longer active, so tickets cannot be loaded or updated. Go back to the start and
@@ -40,8 +44,8 @@ export function RoomShell() {
             </PillButton>
           </div>
         )}
-        <TicketStage />
-        <LinkedTicketModal />
+        {!quick && <TicketStage />}
+        {!quick && <LinkedTicketModal />}
         <TableSection />
         <ResultsSection />
       </main>

@@ -161,7 +161,8 @@ a {
   overflow-x: clip;
 }
 
-.pp-app--narrow {
+.pp-app--narrow,
+.pp-app--no-panel {
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
 }
 
@@ -225,6 +226,30 @@ a {
   font-weight: var(--font-weight-strong);
 }
 
+.pp-hero-create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+}
+
+.pp-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-small);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.pp-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
 .pp-hero-join {
   align-self: stretch;
   display: flex;
@@ -266,7 +291,8 @@ a {
 
 @media (max-width: 899px) {
   .pp-app,
-  .pp-app--narrow {
+  .pp-app--narrow,
+  .pp-app--no-panel {
     grid-template-columns: minmax(0, 1fr);
     padding-bottom: 112px;
   }

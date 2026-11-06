@@ -23,6 +23,7 @@ import type {
   Ticket,
   TicketEntry,
   TicketSync,
+  RoomMode,
 } from "./types";
 
 type Outcome = { room: ServerRoom } | { error: string };
@@ -40,6 +41,17 @@ const HOST_ONLY_ACTIONS: ReadonlySet<ServerAction["type"]> = new Set<ServerActio
   "accept",
   "setSync",
   "updateSettings",
+  "reorderTickets",
+  "resetOrder",
+]);
+
+const QUICK_ROOM_REFUSED_ACTIONS: ReadonlySet<ServerAction["type"]> = new Set<ServerAction["type"]>([
+  "addTickets",
+  "addReferences",
+  "removeTicket",
+  "setCurrent",
+  "accept",
+  "setSync",
   "reorderTickets",
   "resetOrder",
 ]);
@@ -294,8 +306,11 @@ const setCurrent = (room: ServerRoom, ticketId: string): Outcome => {
   });
 };
 
+const hasVotingTarget = (room: ServerRoom): boolean =>
+  room.mode === "quick" || room.currentTicketId !== null;
+
 const startRound = (room: ServerRoom, now: number): Outcome => {
-  if (room.currentTicketId === null || room.round.phase !== "idle") return fail("bad_state");
+  if (!hasVotingTarget(room) || room.round.phase !== "idle") return fail("bad_state");
   return ok({ ...room, round: openRound(room, now) });
 };
 
@@ -305,7 +320,7 @@ const reveal = (room: ServerRoom): Outcome => {
 };
 
 const revote = (room: ServerRoom, now: number): Outcome => {
-  if (room.currentTicketId === null || room.round.phase === "idle") return fail("bad_state");
+  if (!hasVotingTarget(room) || room.round.phase === "idle") return fail("bad_state");
   return ok({ ...room, round: openRound(room, now) });
 };
 
@@ -395,7 +410,7 @@ const apply = (room: ServerRoom, action: ServerAction, actor: Actor, now: number
   }
 };
 
-export function createRoom(code: string, now: number): ServerRoom {
+export function createRoom(code: string, now: number, mode: RoomMode = "standard"): ServerRoom {
   return {
     code,
     createdAt: now,
@@ -417,6 +432,7 @@ export function createRoom(code: string, now: number): ServerRoom {
       autoRevealWhenAllVoted: true,
     },
     manualOrder: false,
+    mode,
   };
 }
 
@@ -433,6 +449,9 @@ export function reduce(
   const room = normalizeRoom(stored);
   if (HOST_ONLY_ACTIONS.has(action.type) && !actor.isHost) {
     return { room, error: "forbidden" };
+  }
+  if (room.mode === "quick" && QUICK_ROOM_REFUSED_ACTIONS.has(action.type)) {
+    return { room, error: "bad_state" };
   }
   const outcome = apply(room, action, actor, now);
   if ("error" in outcome) return { room, error: outcome.error };
@@ -470,6 +489,7 @@ export function toPublicState(stored: ServerRoom, now: number): RoomState {
     },
     settings: { ...room.settings },
     manualOrder: room.manualOrder,
+    mode: room.mode,
     serverNow: now,
   };
 }

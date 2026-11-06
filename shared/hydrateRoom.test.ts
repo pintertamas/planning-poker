@@ -37,6 +37,14 @@ describe("hydrateRoom", () => {
     expect(hydrateRoom(stored({ manualOrder: true })).manualOrder).toBe(true);
   });
 
+  it("defaults the room mode to standard for rooms stored before the flag existed", () => {
+    expect(hydrateRoom(stored()).mode).toBe("standard");
+  });
+
+  it("keeps a stored quick mode", () => {
+    expect(hydrateRoom(stored({ mode: "quick" })).mode).toBe("quick");
+  });
+
   it("defaults blockedBy to an empty list for tickets stored without it", () => {
     const room = hydrateRoom(stored());
     expect(room.tickets[0]?.ticket.blockedBy).toEqual([]);

@@ -14,6 +14,9 @@ export const MAX_TICKETS = 200;
 export const MAX_PLAYERS = 30;
 export const MAX_REFERENCES = 80;
 
+export const ROOM_MODES = ["standard", "quick"] as const;
+export type RoomMode = (typeof ROOM_MODES)[number];
+
 export type RoomLimits = {
   idleEmptyMs: number;
   maxAgeMs: number;
@@ -83,6 +86,7 @@ export type RoomState = {
   round: Round;
   settings: RoomSettings;
   manualOrder: boolean;
+  mode: RoomMode;
   serverNow: number;
 };
 
@@ -106,6 +110,7 @@ export type ServerRoom = {
   round: ServerRound;
   settings: RoomSettings;
   manualOrder: boolean;
+  mode: RoomMode;
 };
 
 export type Actor = { playerId: string; isHost: boolean };
