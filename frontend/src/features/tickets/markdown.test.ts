@@ -18,15 +18,176 @@ describe("parseBlocks", () => {
 
   it("groups unordered and ordered list items and keeps the ordered start number", () => {
     expect(parseBlocks("- a\n* b\n\n3. x\n4. y")).toEqual([
-      { type: "list", ordered: false, start: 1, items: ["a", "b"] },
-      { type: "list", ordered: true, start: 3, items: ["x", "y"] },
+      {
+        type: "list",
+        ordered: false,
+        start: 1,
+        items: [
+          { text: "a", children: [] },
+          { text: "b", children: [] },
+        ],
+      },
+      {
+        type: "list",
+        ordered: true,
+        start: 3,
+        items: [
+          { text: "x", children: [] },
+          { text: "y", children: [] },
+        ],
+      },
     ]);
   });
 
   it("folds indented continuation lines into the previous list item", () => {
     expect(parseBlocks("- first\n  more\n- second")).toEqual([
-      { type: "list", ordered: false, start: 1, items: ["first more", "second"] },
+      {
+        type: "list",
+        ordered: false,
+        start: 1,
+        items: [
+          { text: "first more", children: [] },
+          { text: "second", children: [] },
+        ],
+      },
     ]);
+  });
+
+  it("nests a deeper-indented list inside the item it belongs to", () => {
+    expect(parseBlocks("- parent\n  - child\n  - sibling\n- next")).toEqual([
+      {
+        type: "list",
+        ordered: false,
+        start: 1,
+        items: [
+          {
+            text: "parent",
+            children: [
+              {
+                type: "list",
+                ordered: false,
+                start: 1,
+                items: [
+                  { text: "child", children: [] },
+                  { text: "sibling", children: [] },
+                ],
+              },
+            ],
+          },
+          { text: "next", children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("nests lists more than one level deep", () => {
+    expect(parseBlocks("1. a\n   - b\n     1. c")).toEqual([
+      {
+        type: "list",
+        ordered: true,
+        start: 1,
+        items: [
+          {
+            text: "a",
+            children: [
+              {
+                type: "list",
+                ordered: false,
+                start: 1,
+                items: [
+                  {
+                    text: "b",
+                    children: [
+                      {
+                        type: "list",
+                        ordered: true,
+                        start: 1,
+                        items: [{ text: "c", children: [] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps an indented fenced code block under its list item", () => {
+    expect(parseBlocks("1. Step one\n\n   ```\n   npm test\n   ```\n2. Step two")).toEqual([
+      {
+        type: "list",
+        ordered: true,
+        start: 1,
+        items: [
+          { text: "Step one", children: [{ type: "code", text: "npm test" }] },
+          { text: "Step two", children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps a blank-line-separated indented paragraph as a child of its item", () => {
+    expect(parseBlocks("- item\n\n  detail\n- next")).toEqual([
+      {
+        type: "list",
+        ordered: false,
+        start: 1,
+        items: [
+          { text: "item", children: [{ type: "paragraph", lines: ["detail"] }] },
+          { text: "next", children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps a Linear-style description with bold items and two-space nested bullets nested", () => {
+    const source = [
+      "* Assign the Head of Damage owner by route: Repair Claims CMS for repairs, Total Loss CMS for total losses.",
+      "* **Up to discussion:** Write the timeline note (content comes from C2; leave a seam for it).",
+      "  * Fill in the note template the requirements doc specifies: how the claim was reported, that validation completed, liability, the service instructed, ...",
+      "* Send nothing: no partner, no customer, no external call.",
+      "",
+      "**Error handling**:",
+      "",
+      "* If a step fails, the question is: **can the claim still be correctly instructed without the thing that failed?**",
+      "  * **If yes — log it, raise a task, carry on.** The claim ends up instructed but missing a detail ... (rejected salvage / timeline note).",
+      "  * **If no — stop, raise a task, record the reason.** The claim ends up owned by a handler instead. (closed claim / ...)",
+    ].join("\n");
+    const blocks = parseBlocks(source);
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toEqual({
+      type: "list",
+      ordered: false,
+      start: 1,
+      items: [
+        {
+          text: "Assign the Head of Damage owner by route: Repair Claims CMS for repairs, Total Loss CMS for total losses.",
+          children: [],
+        },
+        {
+          text: "**Up to discussion:** Write the timeline note (content comes from C2; leave a seam for it).",
+          children: [
+            {
+              type: "list",
+              ordered: false,
+              start: 1,
+              items: [
+                {
+                  text: "Fill in the note template the requirements doc specifies: how the claim was reported, that validation completed, liability, the service instructed, ...",
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+        { text: "Send nothing: no partner, no customer, no external call.", children: [] },
+      ],
+    });
+    expect(blocks[1]).toEqual({ type: "paragraph", lines: ["**Error handling**:"] });
+    expect(blocks[2]).toMatchObject({ type: "list", ordered: false });
   });
 
   it("keeps fenced code verbatim, including lines that look like markdown", () => {
@@ -131,6 +292,13 @@ describe("renderMarkdown", () => {
     expect(markup).toContain("<h4>Scope</h4>");
     expect(markup).toContain("<ul><li>one</li><li>two</li></ul>");
     expect(markup).toContain("<pre><code>x</code></pre>");
+  });
+
+  it("renders nested bullets as a list inside the parent item", () => {
+    const markup = html("* **Up to discussion:** Write the note.\n  * Fill in the template.\n* Send nothing.");
+    expect(markup).toContain(
+      "<li><strong>Up to discussion:</strong> Write the note.<ul><li>Fill in the template.</li></ul></li><li>Send nothing.</li>",
+    );
   });
 
   it("opens external links in a new tab without opener access", () => {
