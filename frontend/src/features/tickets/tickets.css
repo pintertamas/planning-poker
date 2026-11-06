@@ -297,6 +297,11 @@
   gap: 4px;
 }
 
+.tk-md li > ul,
+.tk-md li > ol {
+  margin-top: 4px;
+}
+
 .tk-md blockquote {
   margin: 0;
   padding: 2px 0 2px 14px;
