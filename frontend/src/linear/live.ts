@@ -61,6 +61,7 @@ type FavoriteNode = {
 const FAVORITE_PAGE_LIMIT = 5;
 const PROJECT_PAGE_LIMIT = 5;
 const OPEN_STATE_TYPES = ["completed", "canceled"];
+const UNESTIMATED_STATE_NAMES = ["Todo", "Backlog"];
 
 const VIEWER_QUERY = `
   query Viewer {
@@ -271,7 +272,10 @@ function projectIssueFilter(projectId: string, options: ProjectIssueOptions) {
   }
   return {
     project,
-    state: { ...openState, name: { eqIgnoreCase: "Todo" } },
+    state: {
+      ...openState,
+      or: UNESTIMATED_STATE_NAMES.map((name) => ({ name: { eqIgnoreCase: name } })),
+    },
     estimate: { null: true },
   };
 }

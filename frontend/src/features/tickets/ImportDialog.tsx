@@ -480,7 +480,7 @@ function ProjectTab({ service, roomKeys, roomCount, onAdd }: TabProps) {
         <Toggle
           checked={onlyUnestimated}
           onChange={changeFilter}
-          label="Only Todo tickets without an estimate"
+          label="Only Todo and Backlog tickets without an estimate"
         />
       )}
       {selected && listing.error && <Alert tone="error">{listing.error}</Alert>}
@@ -494,7 +494,7 @@ function ProjectTab({ service, roomKeys, roomCount, onAdd }: TabProps) {
           roomCount={roomCount}
           emptyText={
             onlyUnestimated
-              ? `No Todo tickets without an estimate in ${selected.name}.`
+              ? `No Todo or Backlog tickets without an estimate in ${selected.name}.`
               : `${selected.name} has no open tickets.`
           }
           onAdd={onAdd}

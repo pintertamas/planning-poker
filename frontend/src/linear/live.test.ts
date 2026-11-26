@@ -378,7 +378,7 @@ describe("issue paging", () => {
     expect(mock.calls[1]?.variables.after).toBe("cursor-1");
   });
 
-  it("filters project issues to open states and Todo without an estimate when onlyUnestimated is on", async () => {
+  it("filters project issues to open states and Todo or Backlog without an estimate when onlyUnestimated is on", async () => {
     const mock = scriptedFetch(() => ({
       data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
     }));
@@ -388,7 +388,10 @@ describe("issue paging", () => {
 
     expect(mock.calls[0]?.variables.filter).toEqual({
       project: { id: { eq: "project-1" } },
-      state: { type: { nin: ["completed", "canceled"] }, name: { eqIgnoreCase: "Todo" } },
+      state: {
+        type: { nin: ["completed", "canceled"] },
+        or: [{ name: { eqIgnoreCase: "Todo" } }, { name: { eqIgnoreCase: "Backlog" } }],
+      },
       estimate: { null: true },
     });
   });
