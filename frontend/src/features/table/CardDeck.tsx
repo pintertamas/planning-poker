@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { ALLOWED_ESTIMATES, COFFEE } from "@shared/types";
-import type { CardValue, RoundPhase } from "@shared/types";
+import type { CardValue } from "@shared/types";
 import { cx } from "../../ui/cx";
 import { PlayingCard } from "./PlayingCard";
 import "./table.css";
@@ -8,15 +8,14 @@ import "./table.css";
 const DECK: readonly CardValue[] = [...ALLOWED_ESTIMATES, COFFEE];
 
 export function CardDeck({
-  phase,
+  open,
   selected,
   onVote,
 }: {
-  phase: RoundPhase;
+  open: boolean;
   selected: CardValue | null;
   onVote: (value: CardValue) => void;
 }) {
-  const open = phase === "voting";
   return (
     <div className="pp-deck" role="group" aria-label="Pick an estimate">
       {DECK.map((value, index) => {
