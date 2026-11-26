@@ -13,6 +13,7 @@ import type {
 
 const PAGE_SIZE = 5;
 const CLOSED_STATES = ["Done", "Canceled"];
+const UNESTIMATED_STATES = ["Todo", "Backlog"];
 const COMMIT_DELAY_MS = 400;
 
 const DEMO_TEAM: LinearTeam = {
@@ -637,7 +638,7 @@ export function createDemoService(): LinearService {
         (ticket) =>
           projectOf(ticket.id) === projectId &&
           !CLOSED_STATES.includes(ticket.stateName) &&
-          (!options.onlyUnestimated || (ticket.stateName === "Todo" && ticket.currentEstimate === null)),
+          (!options.onlyUnestimated || (UNESTIMATED_STATES.includes(ticket.stateName) && ticket.currentEstimate === null)),
       );
       return pageOf(tickets, cursor);
     },
