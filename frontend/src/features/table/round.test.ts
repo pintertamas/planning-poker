@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { Player, RoomState, Ticket, TicketEntry } from "@shared/types";
-import { currentEntry, estimateFromKey, hasVotingTarget, roundKey, votersByEstimate } from "./round";
+import {
+  currentEntry,
+  deckOpen,
+  estimateFromKey,
+  hasVotingTarget,
+  nextPick,
+  roundKey,
+  selectedCard,
+  votersByEstimate,
+  type Pick,
+} from "./round";
 
 const ticket = (id: string): Ticket => ({
   id,
@@ -126,5 +136,45 @@ describe("votersByEstimate", () => {
   it("falls back to a placeholder name for voters who left", () => {
     const groups = votersByEstimate({ gone: 2 }, players);
     expect(groups[2]).toEqual([{ id: "gone", name: "Unknown" }]);
+  });
+});
+
+describe("deckOpen", () => {
+  it("opens while idle when there is a ticket to vote on", () => {
+    expect(deckOpen(room())).toBe(true);
+  });
+
+  it("stays closed while idle without a ticket", () => {
+    expect(deckOpen(room({ tickets: [], currentTicketId: null }))).toBe(false);
+  });
+
+  it("closes once revealed", () => {
+    expect(deckOpen(room({ round: { phase: "revealed", durationSec: 60, endsAt: null, voted: {}, votes: {} } }))).toBe(false);
+  });
+});
+
+describe("pre-vote selection", () => {
+  const pick = (overrides: Partial<Pick> = {}): Pick => ({ ticketId: "1", value: 5, confirmed: false, ...overrides });
+  const voting = { phase: "voting" as const, durationSec: 60, endsAt: 1000, voted: {}, votes: null };
+
+  it("keeps an idle pick selected once voting starts on the same ticket", () => {
+    const confirmed = nextPick(pick(), "1", true);
+    expect(confirmed).toEqual(pick({ confirmed: true }));
+    expect(selectedCard(confirmed, room({ round: voting }), true)).toBe(5);
+  });
+
+  it("drops the pick when the host switches ticket", () => {
+    expect(nextPick(pick({ confirmed: true }), "2", false)).toBeNull();
+    expect(selectedCard(pick(), room({ currentTicketId: "2" }), false)).toBeNull();
+  });
+
+  it("drops a confirmed pick once the server no longer has the vote", () => {
+    expect(nextPick(pick({ confirmed: true }), "1", false)).toBeNull();
+    expect(selectedCard(pick({ confirmed: true }), room({ round: voting }), false)).toBeNull();
+  });
+
+  it("keeps an unconfirmed pick while the vote is in flight", () => {
+    expect(nextPick(pick(), "1", false)).toEqual(pick());
+    expect(selectedCard(pick(), room(), false)).toBe(5);
   });
 });

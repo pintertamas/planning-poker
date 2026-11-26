@@ -13,7 +13,7 @@ export function orderSeats(players: readonly Player[]): Player[] {
 }
 
 export function seatSlot(round: Round, playerId: string): SeatSlot {
-  if (round.phase === "idle") return { kind: "empty" };
+  if (round.phase === "idle") return round.voted[playerId] === true ? { kind: "hidden" } : { kind: "empty" };
   if (round.phase === "voting") {
     return round.voted[playerId] === true ? { kind: "hidden" } : { kind: "thinking" };
   }

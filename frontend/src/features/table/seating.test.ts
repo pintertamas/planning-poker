@@ -31,6 +31,10 @@ describe("seatSlot", () => {
     expect(seatSlot(round({ phase: "idle" }), "a")).toEqual({ kind: "empty" });
   });
 
+  it("shows a hidden card for a player who picked before voting started", () => {
+    expect(seatSlot(round({ phase: "idle", voted: { a: true } }), "a")).toEqual({ kind: "hidden" });
+  });
+
   it("shows a hidden card once a player has voted", () => {
     const voting = round({ phase: "voting", voted: { a: true } });
     expect(seatSlot(voting, "a")).toEqual({ kind: "hidden" });

@@ -8,13 +8,13 @@ import { Seats } from "./Seats";
 import { TimerRing } from "./TimerRing";
 import { useCountdown } from "./useCountdown";
 import { useRevealTransition } from "./useRevealTransition";
-import { estimateFromKey, hasVotingTarget, roundKey } from "./round";
+import { deckOpen, estimateFromKey, hasVotingTarget, nextPick, roundKey, selectedCard, type Pick } from "./round";
 import "./table.css";
 
 type Send = RoomApi["send"];
 
 const STATUS_LINE = {
-  idle: "Waiting for the host to start",
+  idle: "Waiting for the host to start. You can pick a card already",
   voting: "Voting open: pick a card",
   revealed: "Revealed",
 } as const;
@@ -52,21 +52,28 @@ function TableBody({
   const key = roundKey(state);
   const live = round.phase === "voting";
   const remaining = useCountdown(round.endsAt, clockOffsetMs, live);
-  const [pick, setPick] = useState<{ key: string; value: CardValue } | null>(null);
-  const selected = pick !== null && pick.key === key ? pick.value : null;
+  const selfId = me?.playerId ?? null;
+  const hasVoted = selfId !== null && round.voted[selfId] === true;
+  const [pick, setPick] = useState<Pick | null>(null);
+  const open = deckOpen(state);
+  const selected = selectedCard(pick, state, hasVoted);
   const isHost = me?.isHost === true;
   const revealing = useRevealTransition(round.phase, state.currentTicketId);
 
+  useEffect(() => {
+    setPick((current) => nextPick(current, state.currentTicketId, hasVoted));
+  }, [state.currentTicketId, hasVoted]);
+
   const vote = useCallback(
     (value: CardValue) => {
-      setPick({ key, value });
+      setPick({ ticketId: state.currentTicketId, value, confirmed: false });
       send({ type: "vote", value });
     },
-    [key, send],
+    [state.currentTicketId, send],
   );
 
   useEffect(() => {
-    if (!live) return undefined;
+    if (!open) return undefined;
     function onKeyDown(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isTypingTarget(event.target)) return;
@@ -76,7 +83,7 @@ function TableBody({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [live, vote]);
+  }, [open, vote]);
 
   if (!hasVotingTarget(state)) {
     return (
@@ -116,10 +123,10 @@ function TableBody({
         key={`seats-${key}`}
         players={players}
         round={round}
-        selfId={me?.playerId ?? null}
+        selfId={selfId}
         animate={revealing}
       />
-      <CardDeck key={`deck-${key}`} phase={round.phase} selected={selected} onVote={vote} />
+      <CardDeck key={`deck-${key}`} open={open} selected={selected} onVote={vote} />
     </div>
   );
 }

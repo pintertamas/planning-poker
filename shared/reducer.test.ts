@@ -669,6 +669,84 @@ describe("tick", () => {
   });
 });
 
+describe("pre-voting", () => {
+  const idleRoom = (): ServerRoom => withTickets(lobby(), ["t1", "t2"]);
+
+  it("accepts a vote while idle once there is a ticket to vote on", () => {
+    const room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    expect(room.round.phase).toBe("idle");
+    expect(room.round.votes).toEqual({ a: 5 });
+  });
+
+  it("shows who pre-voted but not what they picked", () => {
+    const room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    const pub = toPublicState(room, T0);
+    expect(pub.round.voted).toEqual({ h: false, a: true, b: false });
+    expect(pub.round.votes).toBeNull();
+  });
+
+  it("refuses a vote while revealed", () => {
+    let room = act(votingRoom(), { type: "reveal" });
+    const result = reduce(room, { type: "vote", value: 3 }, as("a"), T0);
+    expect(result.error).toBe("bad_state");
+    room = result.room;
+    expect(room.round.revealed).toEqual({ h: COFFEE, a: COFFEE, b: COFFEE });
+  });
+
+  it("does not auto-reveal while idle even when everyone has picked", () => {
+    let room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "vote", value: 3 }, as("b"));
+    room = act(room, { type: "vote", value: 3 }, HOST);
+    expect(room.round.phase).toBe("idle");
+  });
+
+  it("carries pre-votes into the round when voting starts", () => {
+    let room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "startRound" }, HOST, T0 + 10);
+    expect(room.round.phase).toBe("voting");
+    expect(room.round.votes).toEqual({ a: 5 });
+    room = act(room, { type: "vote", value: 8 }, as("a"));
+    expect(room.round.votes).toEqual({ a: 8 });
+  });
+
+  it("counts pre-votes towards the auto-reveal once a vote arrives during the round", () => {
+    let room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "vote", value: 3 }, as("b"));
+    room = act(room, { type: "startRound" }, HOST, T0 + 10);
+    room = act(room, { type: "vote", value: 3 }, HOST, T0 + 20);
+    expect(room.round.revealed).toEqual({ h: 3, a: 5, b: 3 });
+  });
+
+  it("clears pre-votes when the host switches to another ticket", () => {
+    let room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "setCurrent", ticketId: "t2" });
+    expect(room.currentTicketId).toBe("t2");
+    expect(room.round.votes).toEqual({});
+    expect(toPublicState(room, T0).round.voted).toEqual({ h: false, a: false, b: false });
+  });
+
+  it("keeps pre-votes when the host re-selects the same ticket", () => {
+    let room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "setCurrent", ticketId: "t1" });
+    expect(room.round.votes).toEqual({ a: 5 });
+  });
+
+  it("clears pre-votes when the current ticket is removed", () => {
+    let room = act(idleRoom(), { type: "vote", value: 5 }, as("a"));
+    room = act(room, { type: "removeTicket", ticketId: "t1" });
+    expect(room.currentTicketId).toBe("t2");
+    expect(room.round.votes).toEqual({});
+  });
+
+  it("lets quick rooms pre-vote and drops the pre-votes on a revote", () => {
+    let room = act(quickLobby(), { type: "vote", value: 2 }, as("a"));
+    room = act(room, { type: "startRound" }, HOST, T0 + 1);
+    expect(room.round.votes).toEqual({ a: 2 });
+    room = act(room, { type: "revote" }, HOST, T0 + 2);
+    expect(room.round.votes).toEqual({});
+  });
+});
+
 describe("startRound", () => {
   it("starts voting with the settings duration and a deadline", () => {
     const room = votingRoom(T0 + 500);

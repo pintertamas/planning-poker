@@ -112,11 +112,15 @@ const freshRound = (room: ServerRoom): ServerRound => ({
   revealed: null,
 });
 
-const openRound = (room: ServerRoom, now: number): ServerRound => ({
+const openRound = (
+  room: ServerRoom,
+  now: number,
+  votes: Record<string, CardValue> = {},
+): ServerRound => ({
   phase: "voting",
   durationSec: room.settings.durationSec,
   endsAt: now + room.settings.durationSec * 1000,
-  votes: {},
+  votes,
   revealed: null,
 });
 
@@ -198,8 +202,11 @@ const rename = (room: ServerRoom, playerId: string, name: string): Outcome => {
   });
 };
 
+const acceptsVotes = (room: ServerRoom): boolean =>
+  room.round.phase === "voting" || (room.round.phase === "idle" && hasVotingTarget(room));
+
 const vote = (room: ServerRoom, playerId: string, value: unknown): Outcome => {
-  if (room.round.phase !== "voting") return fail("bad_state");
+  if (!acceptsVotes(room)) return fail("bad_state");
   if (!isCardValue(value)) return fail("bad_request");
   if (!hasPlayer(room, playerId)) return fail("not_found");
   return ok(
@@ -304,7 +311,10 @@ const setCurrent = (room: ServerRoom, ticketId: string): Outcome => {
   return ok({
     ...room,
     currentTicketId: ticketId,
-    round: room.round.phase === "idle" ? room.round : freshRound(room),
+    round:
+      room.round.phase === "idle" && ticketId === room.currentTicketId
+        ? room.round
+        : freshRound(room),
   });
 };
 
@@ -313,7 +323,7 @@ const hasVotingTarget = (room: ServerRoom): boolean =>
 
 const startRound = (room: ServerRoom, now: number): Outcome => {
   if (!hasVotingTarget(room) || room.round.phase !== "idle") return fail("bad_state");
-  return ok({ ...room, round: openRound(room, now) });
+  return ok({ ...room, round: openRound(room, now, room.round.votes) });
 };
 
 const reveal = (room: ServerRoom): Outcome => {
@@ -462,7 +472,7 @@ export function reduce(
 }
 
 const isVoted = (room: ServerRoom, playerId: string): boolean =>
-  room.round.phase !== "idle" && voteOf(room.round.votes, playerId) !== undefined;
+  voteOf(room.round.votes, playerId) !== undefined;
 
 export function toPublicState(stored: ServerRoom, now: number): RoomState {
   const room = normalizeRoom(stored);

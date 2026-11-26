@@ -13,6 +13,27 @@ export function hasVotingTarget(state: RoomState): boolean {
   return state.mode === "quick" || currentEntry(state) !== null;
 }
 
+export type Pick = { ticketId: string | null; value: CardValue; confirmed: boolean };
+
+export function deckOpen(state: RoomState): boolean {
+  if (state.round.phase === "voting") return true;
+  return state.round.phase === "idle" && hasVotingTarget(state);
+}
+
+export function nextPick(pick: Pick | null, currentTicketId: string | null, hasVoted: boolean): Pick | null {
+  if (pick === null) return null;
+  if (pick.ticketId !== currentTicketId) return null;
+  if (hasVoted) return pick.confirmed ? pick : { ...pick, confirmed: true };
+  return pick.confirmed ? null : pick;
+}
+
+export function selectedCard(pick: Pick | null, state: RoomState, hasVoted: boolean): CardValue | null {
+  if (pick === null || !deckOpen(state)) return null;
+  if (pick.ticketId !== state.currentTicketId) return null;
+  if (pick.confirmed && !hasVoted) return null;
+  return pick.value;
+}
+
 export function roundKey(state: RoomState): string {
   return [state.currentTicketId ?? "none", state.round.phase, state.round.endsAt ?? "none"].join("|");
 }
